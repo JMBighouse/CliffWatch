@@ -1,0 +1,2015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- ================================================================
+         CLIFF WATCH - LA JOLLA COASTAL LANDSLIDE EARLY WARNING SYSTEM
+         ================================================================
+         Created by: Janna M. Bighouse
+         Purpose: Master of Science Thesis
+         Program: Geographic Information Science & Technology
+         University: University of Southern California
+
+         This Progressive Web App (PWA) displays real-time coastal 
+         landslide risk assessments for La Jolla, CA. It integrates
+         machine learning predictions with environmental data from
+         NOAA buoys, precipitation sensors, and seismic monitors.
+         ================================================================ -->
+
+    <!-- Character encoding for proper text display -->
+    <meta charset="UTF-8">
+
+    <!-- Viewport settings for responsive mobile display
+         - width=device-width: Match screen width
+         - initial-scale=1.0: No initial zoom
+         - maximum-scale=1.0: Prevent zoom (for app-like feel)
+         - user-scalable=no: Disable pinch zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <!-- iOS PWA settings for fullscreen app experience -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Theme color for browser chrome (Android) -->
+    <meta name="theme-color" content="#1a365d">
+
+    <title>Cliff Watch - La Jolla Coastal Risk Monitor</title>
+
+    <!-- PWA Manifest - defines app name, icons, and behavior when installed -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- ArcGIS Maps SDK for JavaScript
+         - Provides map display, feature layers, and popup functionality
+         - Using dark theme to match app design -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+
+    <style>
+        /* ================================================================
+           CSS RESET & BASE STYLES
+           ================================================================
+           Reset default browser styles and set up base typography/colors
+           ================================================================ */
+
+        /* Remove default margins/padding from all elements */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;  /* Include padding/border in width calculations */
+        }
+
+        /* Base body styles - dark theme background */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a1628;      /* Deep navy background */
+            color: #e2e8f0;           /* Light gray text */
+            overflow: hidden;          /* Prevent body scroll (map handles scrolling) */
+        }
+
+        /* ================================================================
+           HEADER COMPONENT
+           ================================================================
+           Fixed header at top with app branding, share button, and status badge
+           z-index: 100 ensures it stays above map and other elements
+           ================================================================ */
+        #header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        /* Logo container - holds icon and text */
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Wave emoji icon */
+        .logo-icon {
+            font-size: 28px;
+        }
+
+        /* "Cliff Watch" title text */
+        .logo-text {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        /* "La Jolla Coastal Monitor" subtitle */
+        .logo-subtitle {
+            font-size: 11px;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+
+        /* ================================================================
+           HEADER RIGHT SECTION
+           ================================================================
+           Contains the share button and status badge
+           ================================================================ */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* ================================================================
+           SHARE BUTTON (in header)
+           ================================================================
+           Always visible button to install app / show install instructions
+           This solves the "where is the share button?" confusion on iOS
+           ================================================================ */
+        #share-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.2s;
+        }
+
+        #share-btn:hover {
+            background: rgba(255,255,255,0.25);
+        }
+
+        #share-btn:active {
+            transform: scale(0.95);
+        }
+
+        .share-icon {
+            font-size: 16px;
+        }
+
+        .share-text {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Hide "Install" text on very small screens, keep icon */
+        @media (max-width: 380px) {
+            .share-text {
+                display: none;
+            }
+        }
+
+        /* ================================================================
+           STATUS BADGE
+           ================================================================
+           Shows overall risk status in header (Normal/Elevated/High/Critical)
+           Color changes based on current risk level
+           ================================================================ */
+        #status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Status badge color variants */
+        .status-normal { background: #22543d; color: #9ae6b4; }      /* Green - all clear */
+        .status-elevated { background: #744210; color: #fbd38d; }    /* Orange - caution */
+        .status-high { background: #742a2a; color: #feb2b2; }        /* Red - warning */
+        .status-critical { background: #5c1a1a; color: #ff8080; animation: pulse 1s infinite; }  /* Dark red - pulsing alert */
+
+        /* Pulsing animation for critical status */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* ================================================================
+           MAP CONTAINER
+           ================================================================
+           The main map display area - positioned between header and footer
+           ArcGIS MapView renders inside this div
+           ================================================================ */
+        #viewDiv {
+            position: fixed;
+            top: 60px;      /* Below header */
+            left: 0;
+            right: 0;
+            bottom: 75px;   /* Above footer (includes copyright line) */
+        }
+
+        /* ================================================================
+           FOOTER STATS BAR
+           ================================================================
+           Fixed footer showing risk level counts across all monitoring points
+           z-index: 100 keeps it above the map
+           ================================================================ */
+        #footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #1a202c;
+            padding: 8px 16px 4px 16px;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            border-top: 1px solid #2d3748;
+        }
+
+        .footer-stat {
+            text-align: center;
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            opacity: 0.7;
+            text-transform: uppercase;
+        }
+
+        .stat-critical { color: #ff6b6b; }
+        .stat-high { color: #fc8181; }
+        .stat-elevated { color: #f6ad55; }
+        .stat-medium { color: #faf089; }
+        .stat-low { color: #68d391; }
+
+        .footer-copyright {
+            width: 100%;
+            text-align: center;
+            font-size: 9px;
+            color: #718096;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid #2d3748;
+        }
+
+        /* ================================================================
+           CURRENT CONDITIONS WIDGET
+           ================================================================ */
+        #conditions-widget {
+            position: fixed;
+            top: 70px;
+            right: 10px;
+            z-index: 51;  /* CHANGED from 98 - ensures popup appears above */
+            background: rgba(26, 32, 44, 0.95);
+            border-radius: 12px;
+            padding: 12px;
+            min-width: 180px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border: 1px solid #4a5568;
+        }
+
+        #conditions-widget.with-alert {
+            top: 110px;  /* Shift down when alert banner is shown */
+        }
+
+        .conditions-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #4a5568;
+        }
+
+        .condition-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .condition-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .condition-icon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .condition-value {
+            font-weight: 600;
+            color: #e2e8f0;
+            flex: 1;
+        }
+
+        .condition-label {
+            font-size: 11px;
+            color: #718096;
+        }
+
+        /* Condition value color variants based on severity */
+        .condition-value.elevated { color: #f6ad55; }
+        .condition-value.high { color: #fc8181; }
+        .condition-value.critical { color: #ff6b6b; animation: pulse 1s infinite; }
+
+        /* Last updated timestamp in conditions widget */
+        .conditions-updated {
+            font-size: 9px;
+            color: #718096;
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #4a5568;
+        }
+
+        /* ================================================================
+           POPUP STYLING - CRITICAL Z-INDEX FIX
+           ================================================================ */
+        .esri-popup { z-index: 500 !important; }
+        .esri-popup__wrapper { z-index: 500 !important; }
+        .esri-popup__pointer { z-index: 500 !important; }
+        .esri-popup__main-container {
+            z-index: 500 !important;
+            background: #1a202c !important;
+            color: #e2e8f0 !important;
+            border-radius: 12px !important;
+            max-width: 380px !important;
+        }
+        .esri-ui-corner .esri-popup { z-index: 500 !important; }
+        .esri-view-surface ~ .esri-ui { z-index: 500 !important; }
+        .esri-ui { z-index: 500 !important; }
+        .esri-ui-bottom-left,
+        .esri-ui-bottom-right,
+        .esri-ui-top-left,
+        .esri-ui-top-right,
+        .esri-ui-bottom-center,
+        .esri-ui-top-center { z-index: 500 !important; }
+
+        .esri-popup__header {
+            background: #2d3748 !important;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        .esri-popup__header-title {
+            color: #e2e8f0 !important;
+            font-weight: 600 !important;
+        }
+        .esri-popup__content { padding: 16px !important; }
+        .esri-popup__footer {
+            background: #2d3748 !important;
+            border-radius: 0 0 12px 12px !important;
+        }
+        .esri-popup__button { color: #90cdf4 !important; }
+
+        .popup-content { font-size: 14px; line-height: 1.5; }
+        .popup-risk-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        .popup-risk-critical { background: linear-gradient(135deg, #9b2c2c, #c53030); color: white; animation: pulse 1s infinite; }
+        .popup-risk-high { background: linear-gradient(135deg, #c53030, #e53e3e); color: white; }
+        .popup-risk-elevated { background: linear-gradient(135deg, #c05621, #dd6b20); color: white; }
+        .popup-risk-medium { background: linear-gradient(135deg, #b7791f, #d69e2e); color: white; }
+        .popup-risk-low { background: linear-gradient(135deg, #276749, #38a169); color: white; }
+
+        .popup-section {
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #4a5568;
+        }
+        .popup-section:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .popup-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .popup-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+        .popup-label { color: #a0aec0; }
+        .popup-value { font-weight: 500; color: #e2e8f0; }
+        .popup-value.elevated { color: #f6ad55; }
+        .popup-value.high { color: #fc8181; }
+        .popup-value.critical { color: #ff6b6b; }
+
+        .popup-alert {
+            background: rgba(197, 48, 48, 0.2);
+            border: 1px solid #c53030;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .popup-alert-title { font-weight: 600; color: #fc8181; font-size: 13px; margin-bottom: 4px; }
+        .popup-alert-text { font-size: 12px; color: #feb2b2; line-height: 1.4; }
+        .popup-citation { font-size: 10px; color: #718096; font-style: italic; margin-top: 8px; }
+
+        /* ================================================================
+           REPORT STYLING (Community Reports Popup)
+           ================================================================ */
+        .report-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .report-status.unverified { background: #744210; color: #fbd38d; }
+        .report-status.verified { background: #22543d; color: #9ae6b4; }
+
+        .report-description {
+            background: #2d3748;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .report-photo { width: 100%; border-radius: 8px; margin-top: 10px; }
+        .report-meta { font-size: 12px; color: #718096; margin-top: 8px; }
+
+        /* ================================================================
+           LOADING OVERLAY
+           ================================================================ */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #0a1628;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+        .loading-spinner {
+            width: 60px; height: 60px;
+            border: 4px solid #2d3748;
+            border-top-color: #4299e1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { margin-top: 20px; font-size: 16px; color: #a0aec0; }
+
+        /* Alert Banner */
+        #alert-banner {
+            display: none;
+            position: fixed;
+            top: 60px; left: 0; right: 0;
+            z-index: 99;
+            padding: 12px 16px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        #alert-banner.show { display: block; }
+        #alert-banner.critical { background: linear-gradient(135deg, #9b2c2c, #c53030); animation: pulse 1s infinite; }
+        #alert-banner.high { background: linear-gradient(135deg, #c53030, #e53e3e); }
+        #alert-banner.elevated { background: linear-gradient(135deg, #c05621, #dd6b20); }
+
+        /* ================================================================
+           MAP LEGEND
+           ================================================================ */
+        .map-legend {
+            position: fixed;
+            bottom: 85px;
+            left: 10px;
+            background: rgba(26, 32, 44, 0.95);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 11px;
+            z-index: 50;
+            border: 1px solid #4a5568;
+        }
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #a0aec0;
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+        .legend-section {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #4a5568;
+        }
+        .legend-section:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .legend-section-title {
+            font-size: 9px;
+            color: #718096;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        .legend-symbol {
+            width: 16px; height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .legend-pin { width: 14px; height: 18px; position: relative; }
+        .legend-pin-unverified {
+            background: #dd6b20;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2px dashed rgba(255,255,255,0.6);
+        }
+        .legend-pin-verified {
+            background: #48bb78;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2px solid white;
+        }
+        .legend-pin-verified::after {
+            content: "✓";
+            position: absolute;
+            font-size: 8px;
+            font-weight: bold;
+            color: white;
+            transform: rotate(45deg);
+            top: 2px; left: 2px;
+        }
+
+        /* ================================================================
+           INSTALL PROMPT BANNER
+           ================================================================ */
+        .install-banner {
+            display: none;
+            position: fixed;
+            bottom: 85px;
+            left: 10px;
+            right: 10px;
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 150;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            border: 1px solid #4a5568;
+        }
+        .install-banner.show { display: block; }
+        .install-header { display: flex; align-items: center; gap: 12px; }
+        .install-icon { font-size: 32px; }
+        .install-text { flex: 1; }
+        .install-text strong { display: block; font-size: 16px; margin-bottom: 2px; }
+        .install-text small { font-size: 13px; opacity: 0.8; }
+        .install-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .install-close:hover { opacity: 1; }
+        .install-btn {
+            display: none;
+            width: 100%;
+            margin-top: 12px;
+            padding: 12px;
+            background: #48bb78;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .ios-instructions {
+            display: none;
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        .ios-instructions.show { display: block; }
+        .ios-step { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 14px; }
+        .ios-step-num {
+            width: 24px; height: 24px;
+            background: #4299e1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        /* ================================================================
+           SHARE/INSTALL MODAL
+           ================================================================ */
+        .share-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 250;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .share-modal.show { display: flex; }
+        .share-modal-content {
+            background: #1a202c;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            border: 1px solid #4a5568;
+            text-align: center;
+        }
+        .share-modal-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+        .share-modal-subtitle { font-size: 14px; color: #a0aec0; margin-bottom: 20px; }
+        .share-modal-icon { font-size: 48px; margin-bottom: 16px; }
+        .share-modal-steps { text-align: left; margin-bottom: 20px; }
+        .share-modal-step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; font-size: 14px; line-height: 1.4; }
+        .share-modal-step-num {
+            width: 28px; height: 28px;
+            min-width: 28px;
+            background: #4299e1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .share-modal-note {
+            background: rgba(66, 153, 225, 0.1);
+            border: 1px solid #4299e1;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: #90cdf4;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .share-modal-close {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        /* ================================================================
+           REPORT MODAL
+           ================================================================ */
+        .report-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 200;
+            overflow-y: auto;
+        }
+        .report-modal.show { display: block; }
+        .report-modal-content {
+            background: #1a202c;
+            min-height: 100%;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+        .report-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2d3748;
+        }
+        .report-modal-title { font-size: 20px; font-weight: 700; }
+        .report-modal-close {
+            background: transparent;
+            border: none;
+            color: #a0aec0;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        /* Form styling */
+        .form-group { margin-bottom: 20px; }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #e2e8f0;
+        }
+        .form-label .required { color: #fc8181; }
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 12px;
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 16px;
+        }
+        .form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: #4299e1; }
+        .form-textarea { min-height: 100px; resize: vertical; }
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23a0aec0' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 24px;
+        }
+
+        /* Location picker section */
+        .location-picker {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .location-picker-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .location-status { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .location-status.pending { color: #a0aec0; }
+        .location-status.success { color: #68d391; }
+        .location-status.picking { color: #f6ad55; }
+        .location-buttons { display: flex; gap: 10px; }
+        .location-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            background: #1a202c;
+            color: #e2e8f0;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .location-btn:hover { background: #2d3748; }
+        .location-btn.active { border-color: #4299e1; background: rgba(66, 153, 225, 0.1); }
+
+        /* Mini map for showing selected location (INTERACTIVE MapView) */
+        .location-mini-map {
+            height: 150px;
+            background: #1a202c;
+            border-radius: 6px;
+            margin-top: 12px;
+            display: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .location-mini-map.show { display: block; }
+        #mini-map-view { width: 100%; height: 150px; }
+        #mini-map-view, #mini-map-view * { pointer-events: auto; }
+
+        /* Photo upload section */
+        .photo-upload {
+            border: 2px dashed #4a5568;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .photo-upload:hover { border-color: #4299e1; background: rgba(66, 153, 225, 0.05); }
+        .photo-upload-icon { font-size: 32px; margin-bottom: 8px; }
+        .photo-upload-text { font-size: 14px; color: #a0aec0; }
+        .photo-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .photo-preview {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+        .photo-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.7);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Submit button */
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Success message */
+        .success-message { display: none; text-align: center; padding: 40px 20px; }
+        .success-message.show { display: block; }
+        .success-icon { font-size: 64px; margin-bottom: 16px; }
+        .success-title { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: #68d391; }
+        .success-text { font-size: 16px; color: #a0aec0; margin-bottom: 24px; line-height: 1.5; }
+        .success-close-btn {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 32px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* ================================================================
+           REPORT BUTTON (Floating Action Button)
+           ================================================================ */
+        #report-btn {
+            position: fixed;
+            bottom: 90px;
+            right: 15px;
+            z-index: 52;
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 20px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4);
+            animation: glow 2s ease-in-out infinite;
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4); }
+            50% { box-shadow: 0 4px 25px rgba(66, 153, 225, 0.7); }
+        }
+        #report-btn:active { transform: scale(0.95); }
+        #report-btn .btn-icon { font-size: 18px; }
+        #report-btn.picking-mode { background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%); animation: none; }
+
+        /* ================================================================
+           CREDITS MODAL
+           ================================================================ */
+        .credits-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .credits-modal.show { display: flex; }
+        .credits-content {
+            background: #1a202c;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #4a5568;
+        }
+        .credits-logo { font-size: 48px; margin-bottom: 10px; }
+        .credits-title { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        .credits-subtitle { font-size: 14px; color: #a0aec0; margin-bottom: 24px; }
+        .credits-author {
+            background: rgba(66, 153, 225, 0.1);
+            border: 1px solid #4299e1;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .credits-author-label {
+            font-size: 11px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .credits-author-name { font-size: 18px; font-weight: 600; color: #4299e1; }
+        .credits-affiliation { font-size: 13px; color: #a0aec0; margin-top: 4px; }
+        .credits-purpose { font-size: 12px; color: #718096; line-height: 1.5; margin-bottom: 20px; }
+        .credits-close-btn {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 24px;
+            color: #e2e8f0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- ================================================================
+         LOADING OVERLAY
+         ================================================================ -->
+    <div class="loading-overlay" id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Cliff Watch...</div>
+    </div>
+
+    <!-- ================================================================
+         HEADER
+         ================================================================ -->
+    <div id="header">
+        <div class="logo">
+            <span class="logo-icon">🌊</span>
+            <div>
+                <div class="logo-text">Cliff Watch</div>
+                <div class="logo-subtitle">La Jolla Coastal Monitor</div>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <button id="share-btn" aria-label="Install app">
+                <span class="share-icon">📤</span>
+                <span class="share-text">Install</span>
+            </button>
+
+            <div id="status-badge" class="status-normal">
+                <span id="status-icon">✓</span>
+                <span id="status-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="alert-banner"></div>
+
+    <!-- ================================================================
+         CURRENT CONDITIONS WIDGET
+         ================================================================ -->
+    <div id="conditions-widget">
+        <div class="conditions-title">Current Conditions</div>
+        <div class="condition-row">
+            <span class="condition-icon">🌧️</span>
+            <span class="condition-value" id="current-rain">--</span>
+            <span class="condition-label">Rain</span>
+        </div>
+        <div class="condition-row">
+            <span class="condition-icon">🌊</span>
+            <span class="condition-value" id="current-waves">--</span>
+            <span class="condition-label">Waves</span>
+        </div>
+        <div class="condition-row">
+            <span class="condition-icon">📍</span>
+            <span class="condition-value" id="current-quakes">--</span>
+            <span class="condition-label">Quakes</span>
+        </div>
+        <div class="conditions-updated" id="conditions-updated"></div>
+    </div>
+
+    <div id="viewDiv"></div>
+
+    <!-- ================================================================
+         MAP LEGEND
+         ================================================================ -->
+    <div class="map-legend">
+        <div class="legend-title">Legend</div>
+
+        <div class="legend-section">
+            <div class="legend-section-title">Risk Level</div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#ff6b6b;"></div></div>
+                <span>Critical</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#fc8181;"></div></div>
+                <span>High</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#f6ad55;"></div></div>
+                <span>Elevated</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#faf089;"></div></div>
+                <span>Medium</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#68d391;"></div></div>
+                <span>Low</span>
+            </div>
+        </div>
+
+        <div class="legend-section">
+            <div class="legend-section-title">Reports</div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div class="legend-pin legend-pin-unverified"></div></div>
+                <span>Unverified</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div class="legend-pin legend-pin-verified"></div></div>
+                <span>Verified</span>
+            </div>
+        </div>
+    </div>
+
+    <button id="report-btn" aria-label="Submit a report">
+        <span class="btn-icon">📷</span>
+        <span>Report</span>
+    </button>
+
+    <div class="install-banner" id="install-banner">
+        <div class="install-header">
+            <div class="install-icon">🌊</div>
+            <div class="install-text">
+                <strong>Install Cliff Watch</strong>
+                <small>Add to home screen for quick access</small>
+            </div>
+            <button class="install-close" id="install-close">✕</button>
+        </div>
+        <div class="ios-instructions" id="ios-instructions">
+            <div class="ios-step">
+                <span class="ios-step-num">1</span>
+                <span>Tap the <strong>Share</strong> button (📤) in Safari's toolbar below</span>
+            </div>
+            <div class="ios-step">
+                <span class="ios-step-num">2</span>
+                <span>Select <strong>"Add to Home Screen"</strong></span>
+            </div>
+            <div class="ios-step">
+                <span class="ios-step-num">3</span>
+                <span>Tap <strong>Add</strong> to confirm</span>
+            </div>
+        </div>
+        <button class="install-btn" id="install-btn">Install App</button>
+    </div>
+
+    <div class="share-modal" id="share-modal">
+        <div class="share-modal-content">
+            <div class="share-modal-icon">📲</div>
+            <div class="share-modal-title">Install Cliff Watch</div>
+            <div class="share-modal-subtitle">Add to your home screen for quick access</div>
+
+            <div class="share-modal-steps" id="share-modal-steps"></div>
+
+            <div class="share-modal-note">
+                <strong>💡 Tip:</strong> Once installed, Cliff Watch works like a native app with quick access from your home screen.
+            </div>
+
+            <button class="share-modal-close" id="share-modal-close">Got it</button>
+        </div>
+    </div>
+
+    <div class="credits-modal" id="credits-modal">
+        <div class="credits-content">
+            <div class="credits-logo">🌊</div>
+            <div class="credits-title">Cliff Watch</div>
+            <div class="credits-subtitle">La Jolla Coastal Landslide Early Warning System</div>
+            <div class="credits-author">
+                <div class="credits-author-label">Created by</div>
+                <div class="credits-author-name">Janna M. Bighouse</div>
+                <div class="credits-affiliation">Master of Science Thesis<br>Geographic Information Science & Technology<br>University of Southern California</div>
+            </div>
+            <div class="credits-purpose">
+                This application integrates real-time environmental data with machine learning to predict coastal landslide risk, providing early warnings to protect the La Jolla community.
+            </div>
+            <button class="credits-close-btn" id="credits-close">Close</button>
+        </div>
+    </div>
+
+    <div class="report-modal" id="report-modal">
+        <div class="report-modal-content">
+            <div id="report-form-container">
+                <div class="report-modal-header">
+                    <div class="report-modal-title">📷 Submit a Report</div>
+                    <button class="report-modal-close" id="report-modal-close">✕</button>
+                </div>
+
+                <form id="report-form">
+                    <div class="form-group">
+                        <label class="form-label">
+                            What are you reporting? <span class="required">*</span>
+                        </label>
+                        <select class="form-select" id="report-type" required>
+                            <option value="">Select type...</option>
+                            <option value="cliff_crack">Cliff Crack or Fracture</option>
+                            <option value="erosion">Active Erosion</option>
+                            <option value="rockfall">Recent Rockfall</option>
+                            <option value="slope_movement">Slope Movement</option>
+                            <option value="water_seepage">Water Seepage</option>
+                            <option value="other">Other Hazard</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            Description <span class="required">*</span>
+                        </label>
+                        <textarea class="form-textarea" id="report-description" 
+                            placeholder="Describe what you observed..." required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            Location <span class="required">*</span>
+                        </label>
+                        <div class="location-picker">
+                            <div class="location-picker-header">
+                                <div class="location-status pending" id="location-status">
+                                    <span>📍</span>
+                                    <span id="location-status-text">No location selected</span>
+                                </div>
+                            </div>
+                            <div class="location-buttons">
+                                <button type="button" class="location-btn" id="use-gps-btn">
+                                    <span>📍</span> Use My Location
+                                </button>
+                                <button type="button" class="location-btn" id="pick-map-btn">
+                                    <span>🗺️</span> Pick on Map
+                                </button>
+                            </div>
+                            <div class="location-mini-map" id="location-mini-map">
+                                <div id="mini-map-view"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Photos (optional but helpful)</label>
+                        <div class="photo-upload" id="photo-upload">
+                            <div class="photo-upload-icon">📷</div>
+                            <div class="photo-upload-text">Tap to add photos</div>
+                            <input type="file" id="photo-input" accept="image/*" multiple style="display:none">
+                        </div>
+                        <div class="photo-preview-grid" id="photo-preview-grid"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Your Name (optional)</label>
+                        <input type="text" class="form-input" id="reporter-name" 
+                            placeholder="Anonymous if left blank">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Email (optional - for follow-up)</label>
+                        <input type="email" class="form-input" id="reporter-email" 
+                            placeholder="your@email.com">
+                    </div>
+
+                    <button type="submit" class="submit-btn" id="submit-btn">
+                        <span>📤</span>
+                        <span>Submit Report</span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="success-message" id="success-message">
+                <div class="success-icon">✅</div>
+                <div class="success-title">Report Submitted!</div>
+                <div class="success-text">
+                    Thank you for helping keep La Jolla safe. Your report is now visible on the map and will be reviewed by administrators.
+                </div>
+                <button class="success-close-btn" id="success-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="footer">
+        <div class="footer-stat">
+            <div class="stat-value stat-critical" id="count-critical">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-high" id="count-high">0</div>
+            <div class="stat-label">High</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-elevated" id="count-elevated">0</div>
+            <div class="stat-label">Elevated</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-medium" id="count-medium">0</div>
+            <div class="stat-label">Medium</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-low" id="count-low">0</div>
+            <div class="stat-label">Low</div>
+        </div>
+        <div class="footer-stat" id="credits-btn" style="cursor:pointer;">
+            <div class="stat-value" style="font-size:14px;">ℹ️</div>
+            <div class="stat-label">Credits</div>
+        </div>
+        <div class="footer-copyright">© JM Bighouse</div>
+    </div>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/layers/FeatureLayer",
+            "esri/layers/GraphicsLayer",
+            "esri/Graphic",
+            "esri/geometry/Point",
+            "esri/symbols/SimpleMarkerSymbol",
+            "esri/renderers/UniqueValueRenderer"
+        ], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, Point, SimpleMarkerSymbol, UniqueValueRenderer) {
+
+            const MONITORING_URL = "https://services1.arcgis.com/ZIL9uO234SBBPGL7/arcgis/rest/services/Cliffwatch_MonitoringPoints_Local/FeatureServer/1";
+            const REPORTS_URL = "https://services1.arcgis.com/ZIL9uO234SBBPGL7/arcgis/rest/services/CliffWatch_CommunityReports/FeatureServer/0";
+
+            const RISK_COLORS = {
+                "Critical": "#ff6b6b",
+                "High": "#fc8181",
+                "Elevated": "#f6ad55",
+                "Medium": "#faf089",
+                "Low": "#68d391"
+            };
+
+            let isPickingLocation = false;
+            let selectedLocation = null;
+            let locationAccuracy = null;
+            let uploadedPhotos = [];
+            let view = null;
+            let monitoringLayer = null;
+            let reportsLayer = null;
+
+            // --- Interactive mini map state ---
+            let miniMapView = null;
+            let miniMapLayer = null;
+            let miniMapGraphic = null;
+
+            function createMonitoringPopup(feature) {
+                const attrs = feature.graphic.attributes;
+
+                const riskClass = attrs.risk_class || "Unknown";
+                const probability = attrs.prob_slide;
+                const probDisplay = probability ? (probability * 100).toFixed(1) + "%" : "N/A";
+
+                const rain24h = attrs.PRCP || 0;
+                const rain3d = attrs.PRCP_3 || 0;
+                const rain7d = attrs.PRCP_7 || 0;
+                const waves = attrs.WVHT_mean_3d || attrs.WVHT_mean || 0;
+                const quakes = attrs.EQ_maxM_7d_50km || 0;
+
+                const formatRain = (mm) => {
+                    if (mm === null || mm === undefined) return "--";
+                    const inches = (mm / 25.4).toFixed(2);
+                    return `${mm.toFixed(1)}mm (${inches}in)`;
+                };
+
+                const badgeClass = `popup-risk-${riskClass.toLowerCase()}`;
+
+                let alertHtml = "";
+                if (rain24h >= 50 || rain3d >= 100 || rain7d >= 150) {
+                    alertHtml = `
+                        <div class="popup-alert">
+                            <div class="popup-alert-title">⚠️ Rainfall Threshold Exceeded</div>
+                            <div class="popup-alert-text">
+                                Current rainfall exceeds USGS-established thresholds for elevated landslide risk in this region.
+                            </div>
+                        </div>
+                        <div class="popup-citation">Source: USGS La Conchita rainfall thresholds</div>
+                    `;
+                }
+
+                return `
+                    <div class="popup-content">
+                        <div class="popup-risk-badge ${badgeClass}">${riskClass} Risk</div>
+
+                        <div class="popup-section">
+                            <div class="popup-section-title">Model Prediction</div>
+                            <div class="popup-row">
+                                <span class="popup-label">Probability:</span>
+                                <span class="popup-value">${probDisplay}</span>
+                            </div>
+                        </div>
+
+                        <div class="popup-section">
+                            <div class="popup-section-title">Current Conditions</div>
+                            <div class="popup-row">
+                                <span class="popup-label">Rain (24h):</span>
+                                <span class="popup-value ${rain24h >= 50 ? 'high' : ''}">${formatRain(rain24h)}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">Waves (3d avg):</span>
+                                <span class="popup-value">${waves ? waves.toFixed(1) + 'm' : '--'}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">Max Quake (7d):</span>
+                                <span class="popup-value">${quakes > 0 ? 'M' + quakes.toFixed(1) : 'None'}</span>
+                            </div>
+                        </div>
+
+                        <div class="popup-section">
+                            <div class="popup-section-title">Recent Rainfall</div>
+                            <div class="popup-row">
+                                <span class="popup-label">3-day total:</span>
+                                <span class="popup-value ${rain3d >= 100 ? 'high' : ''}">${formatRain(rain3d)}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">7-day total:</span>
+                                <span class="popup-value ${rain7d >= 150 ? 'high' : ''}">${formatRain(rain7d)}</span>
+                            </div>
+                        </div>
+
+                        ${alertHtml}
+                    </div>
+                `;
+            }
+
+            function createReportPopup(feature) {
+                const attrs = feature.graphic.attributes;
+
+                const reportType = attrs.report_type || "Unknown";
+                const description = attrs.description || "No description provided";
+                const status = attrs.status || "unverified";
+                const reporterName = attrs.reporter_name || "Anonymous";
+                const reportDate = attrs.report_date ? new Date(attrs.report_date).toLocaleDateString() : "Unknown date";
+
+                const typeDisplay = reportType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+
+                return `
+                    <div class="popup-content">
+                        <div class="report-status ${status}">${status}</div>
+                        <h3 style="margin: 10px 0 5px 0;">${typeDisplay}</h3>
+                        <div class="report-description">${description}</div>
+                        <div class="report-meta">
+                            Reported by ${reporterName} on ${reportDate}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // --- Initialize interactive mini map (called once after view is ready) ---
+            function initMiniMap() {
+                miniMapLayer = new GraphicsLayer();
+
+                const miniMap = new Map({
+                    basemap: "satellite",
+                    layers: [miniMapLayer]
+                });
+
+                miniMapView = new MapView({
+                    container: "mini-map-view",
+                    map: miniMap,
+                    center: [-117.2628, 32.8498],
+                    zoom: 16,
+                    constraints: { minZoom: 12, maxZoom: 20 },
+                    ui: ["zoom"]
+                });
+
+                miniMapGraphic = new Graphic({
+                    geometry: null,
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 10,
+                        color: "#4299e1",
+                        outline: { color: "white", width: 2 }
+                    })
+                });
+
+                miniMapLayer.add(miniMapGraphic);
+            }
+
+            const map = new Map({ basemap: "satellite" });
+
+            view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-117.2628, 32.8498],
+                zoom: 14,
+                constraints: { minZoom: 12, maxZoom: 19 },
+                popup: {
+                    dockEnabled: false,
+                    dockOptions: { buttonEnabled: false },
+                    collapseEnabled: false,
+                    dragEnabled: true
+                }
+            });
+
+            const monitoringRenderer = new UniqueValueRenderer({
+                field: "risk_class",
+                defaultSymbol: new SimpleMarkerSymbol({
+                    style: "circle",
+                    size: 8,
+                    color: "#888888",
+                    outline: { color: "white", width: 1 }
+                }),
+                uniqueValueInfos: Object.entries(RISK_COLORS).map(([value, color]) => ({
+                    value: value,
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 10,
+                        color: color,
+                        outline: { color: "white", width: 1 }
+                    })
+                }))
+            });
+
+            monitoringLayer = new FeatureLayer({
+                url: MONITORING_URL,
+                title: "Monitoring Points",
+                renderer: monitoringRenderer,
+                popupTemplate: {
+                    title: "Monitoring Point",
+                    content: createMonitoringPopup
+                },
+                outFields: ["*"]
+            });
+            map.add(monitoringLayer);
+
+            const reportsRenderer = new UniqueValueRenderer({
+                field: "status",
+                defaultSymbol: new SimpleMarkerSymbol({
+                    style: "diamond",
+                    size: 14,
+                    color: "#dd6b20",
+                    outline: { color: "white", width: 2, style: "dash" }
+                }),
+                uniqueValueInfos: [
+                    {
+                        value: "unverified",
+                        symbol: new SimpleMarkerSymbol({
+                            style: "diamond",
+                            size: 14,
+                            color: "#dd6b20",
+                            outline: { color: "white", width: 2, style: "dash" }
+                        })
+                    },
+                    {
+                        value: "verified",
+                        symbol: new SimpleMarkerSymbol({
+                            style: "diamond",
+                            size: 14,
+                            color: "#48bb78",
+                            outline: { color: "white", width: 2 }
+                        })
+                    }
+                ]
+            });
+
+            reportsLayer = new FeatureLayer({
+                url: REPORTS_URL,
+                title: "Community Reports",
+                renderer: reportsRenderer,
+                definitionExpression: "status IN ('unverified', 'verified')",
+                popupTemplate: {
+                    title: "Community Report",
+                    content: createReportPopup
+                },
+                outFields: ["*"]
+            });
+            map.add(reportsLayer);
+
+            view.when(function() {
+                document.getElementById("loading").classList.add("hidden");
+
+                // Init interactive mini map once the ArcGIS API is ready
+                initMiniMap();
+
+                view.popup.dockEnabled = false;
+                view.popup.dockOptions = { buttonEnabled: false, breakpoint: false };
+                view.popup.collapseEnabled = false;
+
+                if (view.popup && view.popup.container) {
+                    view.popup.container.style.zIndex = "500";
+                }
+
+                updateStatistics();
+
+                monitoringLayer.when(function() {
+                    console.log("Monitoring layer loaded - fetching conditions");
+                    updateConditionsWidget();
+                }).catch(function(error) {
+                    console.error("Error loading monitoring layer:", error);
+                });
+
+                setInterval(function() {
+                    monitoringLayer.refresh();
+                    reportsLayer.refresh();
+                    updateStatistics();
+                    updateConditionsWidget();
+                }, 120000);
+            });
+
+            function updateStatistics() {
+                const statsQuery = monitoringLayer.createQuery();
+                statsQuery.where = "1=1";
+                statsQuery.outFields = ["risk_class"];
+                statsQuery.returnGeometry = false;
+
+                monitoringLayer.queryFeatures(statsQuery).then(function(results) {
+                    const counts = { Critical: 0, High: 0, Elevated: 0, Medium: 0, Low: 0 };
+
+                    results.features.forEach(function(feature) {
+                        const riskClass = feature.attributes.risk_class;
+                        if (counts.hasOwnProperty(riskClass)) counts[riskClass]++;
+                    });
+
+                    document.getElementById("count-critical").textContent = counts.Critical;
+                    document.getElementById("count-high").textContent = counts.High;
+                    document.getElementById("count-elevated").textContent = counts.Elevated;
+                    document.getElementById("count-medium").textContent = counts.Medium;
+                    document.getElementById("count-low").textContent = counts.Low;
+
+                    updateStatusBadge(counts);
+                });
+            }
+
+            function updateStatusBadge(counts) {
+                const badge = document.getElementById("status-badge");
+                const icon = document.getElementById("status-icon");
+                const text = document.getElementById("status-text");
+
+                badge.className = "";
+
+                if (counts.Critical > 0) {
+                    badge.classList.add("status-critical");
+                    icon.textContent = "⚠️";
+                    text.textContent = "Critical Risk";
+                    showAlertBanner("critical", `⚠️ ${counts.Critical} areas at CRITICAL risk`);
+                } else if (counts.High > 0) {
+                    badge.classList.add("status-high");
+                    icon.textContent = "⚠️";
+                    text.textContent = "High Risk";
+                    showAlertBanner("high", `⚠️ ${counts.High} areas at HIGH risk`);
+                } else if (counts.Elevated > 0) {
+                    badge.classList.add("status-elevated");
+                    icon.textContent = "⚡";
+                    text.textContent = "Elevated";
+                    showAlertBanner("elevated", `⚡ ${counts.Elevated} areas at ELEVATED risk`);
+                } else {
+                    badge.classList.add("status-normal");
+                    icon.textContent = "✓";
+                    text.textContent = "Normal";
+                    hideAlertBanner();
+                }
+            }
+
+            function showAlertBanner(level, message) {
+                const banner = document.getElementById("alert-banner");
+                banner.className = `show ${level}`;
+                banner.textContent = message;
+                document.getElementById("conditions-widget").classList.add("with-alert");
+            }
+
+            function hideAlertBanner() {
+                const banner = document.getElementById("alert-banner");
+                banner.className = "";
+                document.getElementById("conditions-widget").classList.remove("with-alert");
+            }
+
+            function updateConditionsWidget() {
+                const query = monitoringLayer.createQuery();
+                query.where = "1=1";
+                query.num = 1;
+                query.outFields = ["PRCP", "WVHT_mean_3d", "WVHT_mean", "EQ_maxM_7d_50km", "last_update_utc"];
+
+                monitoringLayer.queryFeatures(query).then(function(results) {
+                    if (results.features.length > 0) {
+                        const attrs = results.features[0].attributes;
+
+                        const rain = attrs.PRCP || 0;
+                        const rainEl = document.getElementById("current-rain");
+                        const rainIn = (rain / 25.4).toFixed(2);
+                        rainEl.textContent = rain.toFixed(1) + "mm (" + rainIn + "in)";
+                        rainEl.className = "condition-value" + (rain >= 50 ? " high" : rain >= 25 ? " elevated" : "");
+
+                        const waves = attrs.WVHT_mean_3d || attrs.WVHT_mean || 0;
+                        const wavesEl = document.getElementById("current-waves");
+                        wavesEl.textContent = waves.toFixed(1) + "m";
+                        wavesEl.className = "condition-value" + (waves >= 3 ? " high" : waves >= 2 ? " elevated" : "");
+
+                        const eq = attrs.EQ_maxM_7d_50km || 0;
+                        const quakesEl = document.getElementById("current-quakes");
+                        quakesEl.textContent = eq > 0 ? "M" + eq.toFixed(1) : "None";
+                        quakesEl.className = "condition-value" + (eq >= 4 ? " high" : eq >= 2.5 ? " elevated" : "");
+
+                        const lastUpdate = attrs.last_update_utc;
+                        const updatedEl = document.getElementById("conditions-updated");
+                        if (lastUpdate) {
+                            const updateDate = new Date(lastUpdate);
+                            updatedEl.textContent = "Updated: " + updateDate.toLocaleString();
+                        } else {
+                            updatedEl.textContent = "";
+                        }
+                    } else {
+                        console.warn("updateConditionsWidget: No features returned from query");
+                    }
+                }).catch(function(error) {
+                    console.error("Failed to query conditions data:", error);
+                });
+            }
+
+            const reportBtn = document.getElementById("report-btn");
+            const reportModal = document.getElementById("report-modal");
+            const reportModalClose = document.getElementById("report-modal-close");
+            const reportForm = document.getElementById("report-form");
+            const useGpsBtn = document.getElementById("use-gps-btn");
+            const pickMapBtn = document.getElementById("pick-map-btn");
+            const photoUpload = document.getElementById("photo-upload");
+            const photoInput = document.getElementById("photo-input");
+            const successMessage = document.getElementById("success-message");
+            const successCloseBtn = document.getElementById("success-close-btn");
+
+            reportBtn.addEventListener("click", function() {
+                if (isPickingLocation) {
+                    isPickingLocation = false;
+                    reportBtn.classList.remove("picking-mode");
+                    reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+                } else {
+                    reportModal.classList.add("show");
+                    resetReportForm();
+                }
+            });
+
+            reportModalClose.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                cancelPickingMode();
+            });
+
+            useGpsBtn.addEventListener("click", function() {
+                if (!navigator.geolocation) {
+                    alert("Geolocation is not supported by your browser");
+                    return;
+                }
+
+                updateLocationStatus("pending", "Getting location...");
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        selectedLocation = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                        locationAccuracy = position.coords.accuracy;
+
+                        updateLocationStatus("success", `Location found (±${Math.round(locationAccuracy)}m)`);
+                        showMiniMap(selectedLocation.latitude, selectedLocation.longitude);
+                        useGpsBtn.classList.add("active");
+                        pickMapBtn.classList.remove("active");
+                    },
+                    function(error) {
+                        let message = "Unable to get location";
+                        if (error.code === error.PERMISSION_DENIED) {
+                            message = "Location permission denied. Please enable in settings.";
+                        }
+                        updateLocationStatus("pending", message);
+                        alert(message);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            });
+
+            pickMapBtn.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                isPickingLocation = true;
+                reportBtn.classList.add("picking-mode");
+                reportBtn.innerHTML = '<span class="btn-icon">✕</span><span>Cancel</span>';
+                alert("Tap on the map to select the location of the hazard");
+            });
+
+            view.on("click", function(event) {
+                if (!isPickingLocation) return;
+
+                selectedLocation = {
+                    latitude: event.mapPoint.latitude,
+                    longitude: event.mapPoint.longitude
+                };
+                locationAccuracy = 10;
+
+                isPickingLocation = false;
+                reportBtn.classList.remove("picking-mode");
+                reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+
+                reportModal.classList.add("show");
+                updateLocationStatus("success", "Location selected from map");
+                showMiniMap(selectedLocation.latitude, selectedLocation.longitude);
+                pickMapBtn.classList.add("active");
+                useGpsBtn.classList.remove("active");
+            });
+
+            function updateLocationStatus(status, text) {
+                const statusEl = document.getElementById("location-status");
+                const textEl = document.getElementById("location-status-text");
+                statusEl.className = `location-status ${status}`;
+                textEl.textContent = text;
+            }
+
+            // Show interactive mini map with selected location (pan/zoom enabled)
+            function showMiniMap(lat, lon) {
+                const miniMap = document.getElementById("location-mini-map");
+                miniMap.classList.add("show");
+
+                if (!miniMapView || !miniMapGraphic) return;
+
+                const pt = new Point({ latitude: lat, longitude: lon });
+                miniMapGraphic.geometry = pt;
+
+                miniMapView.goTo({ center: [lon, lat], zoom: 17 }, { animate: false });
+            }
+
+            photoUpload.addEventListener("click", function() { photoInput.click(); });
+
+            photoInput.addEventListener("change", function(e) {
+                const files = Array.from(e.target.files);
+                const maxPhotos = 5;
+
+                if (uploadedPhotos.length + files.length > maxPhotos) {
+                    alert(`Maximum ${maxPhotos} photos allowed`);
+                    return;
+                }
+
+                files.forEach(function(file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        uploadedPhotos.push(e.target.result);
+                        renderPhotoPreview();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            function renderPhotoPreview() {
+                const grid = document.getElementById("photo-preview-grid");
+                grid.innerHTML = uploadedPhotos.map((photo, index) => `
+                    <div class="photo-preview">
+                        <img src="${photo}" alt="Preview ${index + 1}">
+                        <button class="photo-remove" onclick="removePhoto(${index})">✕</button>
+                    </div>
+                `).join("");
+            }
+
+            window.removePhoto = function(index) {
+                uploadedPhotos.splice(index, 1);
+                renderPhotoPreview();
+            };
+
+            function resetReportForm() {
+                reportForm.reset();
+                selectedLocation = null;
+                locationAccuracy = null;
+                uploadedPhotos = [];
+                document.getElementById("photo-preview-grid").innerHTML = "";
+                document.getElementById("location-mini-map").classList.remove("show");
+                updateLocationStatus("pending", "No location selected");
+                useGpsBtn.classList.remove("active");
+                pickMapBtn.classList.remove("active");
+                document.getElementById("report-form-container").style.display = "block";
+                successMessage.classList.remove("show");
+
+                // Clear mini map marker (optional)
+                if (miniMapGraphic) miniMapGraphic.geometry = null;
+            }
+
+            function cancelPickingMode() {
+                if (isPickingLocation) {
+                    isPickingLocation = false;
+                    reportBtn.classList.remove("picking-mode");
+                    reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+                }
+            }
+
+            reportForm.addEventListener("submit", async function(e) {
+                e.preventDefault();
+
+                if (!selectedLocation) {
+                    alert("Please select a location for your report");
+                    return;
+                }
+
+                const submitBtn = document.getElementById("submit-btn");
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span>Submitting...</span>';
+
+                try {
+                    const feature = {
+                        geometry: {
+                            type: "point",
+                            latitude: selectedLocation.latitude,
+                            longitude: selectedLocation.longitude
+                        },
+                        attributes: {
+                            report_type: document.getElementById("report-type").value,
+                            description: document.getElementById("report-description").value,
+                            reporter_name: document.getElementById("reporter-name").value || "Anonymous",
+                            reporter_email: document.getElementById("reporter-email").value || null,
+                            report_date: Date.now(),
+                            status: "unverified",
+                            location_accuracy: locationAccuracy
+                        }
+                    };
+
+                    const result = await reportsLayer.applyEdits({
+                        addFeatures: [new Graphic(feature)]
+                    });
+
+                    if (result.addFeatureResults.length > 0 && !result.addFeatureResults[0].error) {
+                        document.getElementById("report-form-container").style.display = "none";
+                        successMessage.classList.add("show");
+                        reportsLayer.refresh();
+                    } else {
+                        throw new Error("Failed to submit report");
+                    }
+                } catch (error) {
+                    console.error("Error submitting report:", error);
+                    alert("Error submitting report. Please try again.");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>📤</span><span>Submit Report</span>';
+                }
+            });
+
+            successCloseBtn.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                resetReportForm();
+            });
+        });
+
+        (function() {
+            const shareBtn = document.getElementById("share-btn");
+            const shareModal = document.getElementById("share-modal");
+            const shareModalClose = document.getElementById("share-modal-close");
+            const shareModalSteps = document.getElementById("share-modal-steps");
+
+            function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+            function isAndroid() { return /Android/.test(navigator.userAgent); }
+            function isInStandaloneMode() { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone; }
+
+            function populateShareSteps() {
+                if (isInStandaloneMode()) {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">✓</div>
+                            <div><strong>Already installed!</strong><br>You're using Cliff Watch as an app.</div>
+                        </div>
+                    `;
+                } else if (isIOS()) {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Look for Safari's <strong>Share button</strong> (📤) at the <strong>bottom</strong> of your screen in the browser toolbar</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>Tap <strong>Add</strong> in the top right corner</div>
+                        </div>
+                    `;
+                } else if (isAndroid()) {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Tap the <strong>menu button</strong> (⋮) in your browser</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Select <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>Tap <strong>Install</strong> to confirm</div>
+                        </div>
+                    `;
+                } else {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Look for the <strong>install icon</strong> (⊕) in your browser's address bar</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Click it and select <strong>"Install"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>The app will be added to your applications</div>
+                        </div>
+                    `;
+                }
+            }
+
+            shareBtn.addEventListener("click", function() {
+                populateShareSteps();
+                shareModal.classList.add("show");
+            });
+
+            shareModalClose.addEventListener("click", function() {
+                shareModal.classList.remove("show");
+            });
+
+            shareModal.addEventListener("click", function(e) {
+                if (e.target === shareModal) shareModal.classList.remove("show");
+            });
+        })();
+
+        (function() {
+            let deferredPrompt = null;
+            const installBanner = document.getElementById("install-banner");
+            const installBtn = document.getElementById("install-btn");
+            const installClose = document.getElementById("install-close");
+            const iosInstructions = document.getElementById("ios-instructions");
+
+            function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+            function isInStandaloneMode() { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone; }
+
+            if (isInStandaloneMode()) return;
+
+            const dismissed = localStorage.getItem("installDismissed");
+            if (dismissed && Date.now() - parseInt(dismissed) < 24 * 60 * 60 * 1000) return;
+
+            window.addEventListener("beforeinstallprompt", function(e) {
+                e.preventDefault();
+                deferredPrompt = e;
+
+                setTimeout(function() {
+                    installBtn.style.display = "block";
+                    installBanner.classList.add("show");
+                }, 3000);
+            });
+
+            if (isIOS()) {
+                setTimeout(function() {
+                    iosInstructions.classList.add("show");
+                    installBtn.style.display = "none";
+                    installBanner.classList.add("show");
+                }, 3000);
+            }
+
+            installBtn.addEventListener("click", async function() {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                const result = await deferredPrompt.userChoice;
+                console.log("Install prompt result:", result.outcome);
+                deferredPrompt = null;
+                installBanner.classList.remove("show");
+            });
+
+            installClose.addEventListener("click", function() {
+                installBanner.classList.remove("show");
+                localStorage.setItem("installDismissed", Date.now().toString());
+            });
+        })();
+
+        (function() {
+            const creditsBtn = document.getElementById("credits-btn");
+            const creditsModal = document.getElementById("credits-modal");
+            const creditsClose = document.getElementById("credits-close");
+
+            creditsBtn.addEventListener("click", function() {
+                creditsModal.classList.add("show");
+            });
+
+            creditsClose.addEventListener("click", function() {
+                creditsModal.classList.remove("show");
+            });
+
+            creditsModal.addEventListener("click", function(e) {
+                if (e.target === creditsModal) creditsModal.classList.remove("show");
+            });
+        })();
+    </script>
+</body>
+</html>
