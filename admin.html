@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cliff Watch - Admin Dashboard</title>
+    
+    <!-- ArcGIS Maps SDK -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a1628;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        
+        /* Login Screen */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        #login-screen.hidden { display: none; }
+        
+        .login-box {
+            background: #1a202c;
+            padding: 40px;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .login-logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .login-subtitle {
+            font-size: 14px;
+            color: #a0aec0;
+            margin-bottom: 30px;
+        }
+        
+        .login-input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #4a5568;
+            border-radius: 8px;
+            background: #2d3748;
+            color: #e2e8f0;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .login-input:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4);
+        }
+        
+        .login-error {
+            color: #fc8181;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        /* Main Dashboard */
+        #dashboard {
+            display: none;
+        }
+        
+        #dashboard.show { display: block; }
+        
+        .header {
+            background: linear-gradient(135deg, #1a365d, #2c5282);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header-logo {
+            font-size: 28px;
+        }
+        
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .header-subtitle {
+            font-size: 12px;
+            color: #90cdf4;
+        }
+        
+        .logout-btn {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            padding: 20px 24px;
+            background: #1a202c;
+            border-bottom: 1px solid #2d3748;
+            flex-wrap: wrap;
+        }
+        
+        .stat-card {
+            background: #2d3748;
+            padding: 16px 24px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 120px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #a0aec0;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .stat-pending .stat-value { color: #f6ad55; }
+        .stat-verified .stat-value { color: #68d391; }
+        .stat-invalid .stat-value { color: #fc8181; }
+        
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #1a202c;
+            border-bottom: 1px solid #2d3748;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-label {
+            font-size: 14px;
+            color: #a0aec0;
+        }
+        
+        .filter-select {
+            padding: 10px 16px;
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .refresh-btn {
+            padding: 10px 20px;
+            background: #4299e1;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .refresh-btn:hover {
+            background: #3182ce;
+        }
+        
+        /* Reports Grid */
+        .reports-container {
+            padding: 24px;
+        }
+        
+        .reports-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .report-card {
+            background: #1a202c;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #2d3748;
+            transition: all 0.2s;
+        }
+        
+        .report-card:hover {
+            border-color: #4a5568;
+            transform: translateY(-2px);
+        }
+        
+        .report-photo {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: #2d3748;
+            cursor: pointer;
+        }
+        
+        .report-photo-placeholder {
+            width: 100%;
+            height: 200px;
+            background: #2d3748;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #4a5568;
+            font-size: 48px;
+        }
+        
+        .report-content {
+            padding: 20px;
+        }
+        
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        
+        .report-type {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .report-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        
+        .status-unverified {
+            background: linear-gradient(135deg, #c05621, #dd6b20);
+            color: white;
+        }
+        
+        .status-verified {
+            background: linear-gradient(135deg, #276749, #38a169);
+            color: white;
+        }
+        
+        .status-invalid {
+            background: linear-gradient(135deg, #742a2a, #9b2c2c);
+            color: white;
+        }
+        
+        .report-description {
+            font-size: 14px;
+            color: #cbd5e0;
+            margin-bottom: 16px;
+            line-height: 1.5;
+            max-height: 80px;
+            overflow: hidden;
+        }
+        
+        .report-meta {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 16px;
+        }
+        
+        .report-meta-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        
+        .report-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .btn-verify {
+            background: linear-gradient(135deg, #276749, #38a169);
+            color: white;
+        }
+        
+        .btn-verify:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(72, 187, 120, 0.3);
+        }
+        
+        .btn-invalid {
+            background: linear-gradient(135deg, #742a2a, #9b2c2c);
+            color: white;
+        }
+        
+        .btn-invalid:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(197, 48, 48, 0.3);
+        }
+        
+        .btn-reset {
+            background: #4a5568;
+            color: white;
+        }
+        
+        .btn-reset:hover {
+            background: #718096;
+        }
+        
+        .btn-map {
+            background: #2d3748;
+            color: #90cdf4;
+            border: 1px solid #4a5568;
+        }
+        
+        .btn-map:hover {
+            background: #4a5568;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+        
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        .empty-title {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #a0aec0;
+        }
+        
+        /* Photo Modal */
+        #photo-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.95);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        #photo-modal.show {
+            display: flex;
+        }
+        
+        #photo-modal img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 32px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #a0aec0;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2d3748;
+            border-top-color: #4299e1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen">
+        <div class="login-box">
+            <div class="login-logo">🌊</div>
+            <div class="login-title">Cliff Watch Admin</div>
+            <div class="login-subtitle">Review community observations</div>
+            <input type="password" class="login-input" id="password-input" placeholder="Enter admin password">
+            <button class="login-btn" id="login-btn">Sign In</button>
+            <div class="login-error" id="login-error"></div>
+        </div>
+    </div>
+    
+    <!-- Main Dashboard -->
+    <div id="dashboard">
+        <div class="header">
+            <div class="header-left">
+                <span class="header-logo">🌊</span>
+                <div>
+                    <div class="header-title">Cliff Watch Admin</div>
+                    <div class="header-subtitle">Community Report Review</div>
+                </div>
+            </div>
+            <button class="logout-btn" id="logout-btn">Logout</button>
+        </div>
+        
+        <div class="stats-bar">
+            <div class="stat-card stat-pending">
+                <div class="stat-value" id="stat-pending">-</div>
+                <div class="stat-label">Pending Review</div>
+            </div>
+            <div class="stat-card stat-verified">
+                <div class="stat-value" id="stat-verified">-</div>
+                <div class="stat-label">Verified</div>
+            </div>
+            <div class="stat-card stat-invalid">
+                <div class="stat-value" id="stat-invalid">-</div>
+                <div class="stat-label">Invalid</div>
+            </div>
+        </div>
+        
+        <div class="filter-bar">
+            <span class="filter-label">Filter by status:</span>
+            <select class="filter-select" id="status-filter">
+                <option value="unverified">⏳ Unverified (Pending)</option>
+                <option value="all">📋 All Reports</option>
+                <option value="verified">✅ Verified</option>
+                <option value="invalid">❌ Invalid</option>
+            </select>
+            <button class="refresh-btn" id="refresh-btn">
+                <span>🔄</span>
+                <span>Refresh</span>
+            </button>
+        </div>
+        
+        <div class="reports-container">
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <div>Loading reports...</div>
+            </div>
+            <div class="reports-grid" id="reports-grid"></div>
+            <div class="empty-state" id="empty-state" style="display: none;">
+                <div class="empty-icon">📭</div>
+                <div class="empty-title">No reports found</div>
+                <div>Try changing your filter or check back later</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Photo Modal -->
+    <div id="photo-modal">
+        <button class="modal-close" id="photo-modal-close">✕</button>
+        <img id="photo-modal-img" src="" alt="Report photo">
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION - UPDATE THESE VALUES
+        // ============================================
+        
+        // IMPORTANT: Change this password!
+        const ADMIN_PASSWORD = "auth2026";
+        
+        // Your Community Reports feature service URL
+        const REPORTS_URL = "https://services1.arcgis.com/ZIL9uO234SBBPGL7/arcgis/rest/services/CliffWatch_CommunityReports/FeatureServer/0";
+        
+        // ============================================
+        
+        const TYPE_LABELS = {
+            "crack": "🔍 Crack / Fissure",
+            "erosion": "🏜️ Erosion / Rockfall",
+            "debris": "🪨 Debris on Beach",
+            "water": "💧 Water Seepage",
+            "tilt": "📐 Tilting / Leaning",
+            "other": "📝 Other"
+        };
+        
+        // DOM Elements
+        const loginScreen = document.getElementById("login-screen");
+        const dashboard = document.getElementById("dashboard");
+        const passwordInput = document.getElementById("password-input");
+        const loginBtn = document.getElementById("login-btn");
+        const loginError = document.getElementById("login-error");
+        const logoutBtn = document.getElementById("logout-btn");
+        const statusFilter = document.getElementById("status-filter");
+        const refreshBtn = document.getElementById("refresh-btn");
+        const reportsGrid = document.getElementById("reports-grid");
+        const loadingEl = document.getElementById("loading");
+        const emptyState = document.getElementById("empty-state");
+        const photoModal = document.getElementById("photo-modal");
+        const photoModalImg = document.getElementById("photo-modal-img");
+        const photoModalClose = document.getElementById("photo-modal-close");
+        
+        // Check if already logged in
+        if (sessionStorage.getItem("cliffwatch_admin") === "true") {
+            showDashboard();
+        }
+        
+        // Login handling
+        loginBtn.addEventListener("click", attemptLogin);
+        passwordInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") attemptLogin();
+        });
+        
+        function attemptLogin() {
+            if (passwordInput.value === ADMIN_PASSWORD) {
+                sessionStorage.setItem("cliffwatch_admin", "true");
+                showDashboard();
+            } else {
+                loginError.textContent = "Incorrect password";
+                passwordInput.value = "";
+            }
+        }
+        
+        function showDashboard() {
+            loginScreen.classList.add("hidden");
+            dashboard.classList.add("show");
+            loadReports();
+        }
+        
+        // Logout
+        logoutBtn.addEventListener("click", () => {
+            sessionStorage.removeItem("cliffwatch_admin");
+            location.reload();
+        });
+        
+        // Filter change
+        statusFilter.addEventListener("change", loadReports);
+        
+        // Refresh
+        refreshBtn.addEventListener("click", loadReports);
+        
+        // Photo modal
+        photoModalClose.addEventListener("click", () => {
+            photoModal.classList.remove("show");
+        });
+        
+        photoModal.addEventListener("click", (e) => {
+            if (e.target === photoModal) {
+                photoModal.classList.remove("show");
+            }
+        });
+        
+        // Load reports from ArcGIS
+        async function loadReports() {
+            loadingEl.style.display = "block";
+            reportsGrid.innerHTML = "";
+            emptyState.style.display = "none";
+            
+            try {
+                // Build query based on filter
+                const filter = statusFilter.value;
+                let where = "1=1";
+                if (filter === "unverified") {
+                    where = "status = 'unverified'";
+                } else if (filter === "verified") {
+                    where = "status = 'verified'";
+                } else if (filter === "invalid") {
+                    where = "status = 'invalid'";
+                }
+                
+                // Fetch reports
+                const queryUrl = `${REPORTS_URL}/query?where=${encodeURIComponent(where)}&outFields=*&orderByFields=report_date DESC&f=json`;
+                const response = await fetch(queryUrl);
+                const data = await response.json();
+                
+                loadingEl.style.display = "none";
+                
+                if (!data.features || data.features.length === 0) {
+                    emptyState.style.display = "block";
+                    updateStats();
+                    return;
+                }
+                
+                // Render reports
+                for (const feature of data.features) {
+                    const card = await createReportCard(feature);
+                    reportsGrid.appendChild(card);
+                }
+                
+                updateStats();
+                
+            } catch (error) {
+                console.error("Error loading reports:", error);
+                loadingEl.innerHTML = `<div style="color: #fc8181;">Error loading reports: ${error.message}</div>`;
+            }
+        }
+        
+        // Create report card
+        async function createReportCard(feature) {
+            const attrs = feature.attributes;
+            const objectId = attrs.OBJECTID;
+            const reportType = attrs.report_type || "other";
+            const description = attrs.description || "";
+            const reporterName = attrs.reporter_name || "Anonymous";
+            const reporterEmail = attrs.reporter_email || "";
+            const status = attrs.status || "unverified";
+            const reportDate = attrs.report_date ? new Date(attrs.report_date).toLocaleString() : "Unknown";
+            const locationAccuracy = attrs.location_accuracy;
+            const lat = feature.geometry?.y;
+            const lng = feature.geometry?.x;
+            
+            // Get attachments (photos)
+            let photoUrl = null;
+            try {
+                const attachResponse = await fetch(`${REPORTS_URL}/${objectId}/attachments?f=json`);
+                const attachData = await attachResponse.json();
+                if (attachData.attachmentInfos && attachData.attachmentInfos.length > 0) {
+                    photoUrl = `${REPORTS_URL}/${objectId}/attachments/${attachData.attachmentInfos[0].id}`;
+                }
+            } catch (e) {
+                console.log("No attachments for", objectId);
+            }
+            
+            const card = document.createElement("div");
+            card.className = "report-card";
+            card.dataset.objectId = objectId;
+            
+            const statusClass = `status-${status}`;
+            const typeLabel = TYPE_LABELS[reportType] || reportType;
+            
+            card.innerHTML = `
+                ${photoUrl 
+                    ? `<img class="report-photo" src="${photoUrl}" alt="Report photo" onclick="showPhoto('${photoUrl}')">`
+                    : `<div class="report-photo-placeholder">📷</div>`
+                }
+                <div class="report-content">
+                    <div class="report-header">
+                        <div class="report-type">${typeLabel}</div>
+                        <span class="report-status ${statusClass}">${status}</span>
+                    </div>
+                    <div class="report-description">${description}</div>
+                    <div class="report-meta">
+                        <div class="report-meta-row">
+                            <span>👤</span>
+                            <span>${reporterName}</span>
+                            ${reporterEmail ? `<span style="color: #4299e1;">(${reporterEmail})</span>` : ''}
+                        </div>
+                        <div class="report-meta-row">
+                            <span>📅</span>
+                            <span>${reportDate}</span>
+                        </div>
+                        <div class="report-meta-row">
+                            <span>📍</span>
+                            <span>${lat ? lat.toFixed(5) : '?'}, ${lng ? lng.toFixed(5) : '?'}</span>
+                            ${locationAccuracy 
+                                ? `<span style="color: ${locationAccuracy <= 30 ? '#68d391' : locationAccuracy <= 100 ? '#f6ad55' : '#fc8181'};">
+                                    (±${locationAccuracy.toFixed(0)}m)
+                                   </span>` 
+                                : '<span style="color: #718096;">(manual)</span>'}
+                        </div>
+                    </div>
+                    <div class="report-actions">
+                        ${status !== 'verified' 
+                            ? `<button class="action-btn btn-verify" onclick="updateStatus(${objectId}, 'verified')">
+                                <span>✓</span> Verify
+                               </button>` 
+                            : ''}
+                        ${status !== 'invalid' 
+                            ? `<button class="action-btn btn-invalid" onclick="updateStatus(${objectId}, 'invalid')">
+                                <span>✕</span> Invalid
+                               </button>` 
+                            : ''}
+                        ${status !== 'unverified' 
+                            ? `<button class="action-btn btn-reset" onclick="updateStatus(${objectId}, 'unverified')">
+                                <span>↺</span> Reset
+                               </button>` 
+                            : ''}
+                        ${lat && lng 
+                            ? `<button class="action-btn btn-map" onclick="openMap(${lat}, ${lng})">
+                                <span>🗺️</span> Map
+                               </button>` 
+                            : ''}
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        // Update report status
+        async function updateStatus(objectId, newStatus) {
+            try {
+                const response = await fetch(`${REPORTS_URL}/updateFeatures`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({
+                        f: "json",
+                        features: JSON.stringify([{
+                            attributes: {
+                                OBJECTID: objectId,
+                                status: newStatus
+                            }
+                        }])
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.updateResults && result.updateResults[0].success) {
+                    // Reload reports
+                    loadReports();
+                } else {
+                    alert("Error updating status: " + (result.updateResults?.[0]?.error?.description || "Unknown error"));
+                }
+                
+            } catch (error) {
+                console.error("Error updating status:", error);
+                alert("Error updating status: " + error.message);
+            }
+        }
+        
+        // Update stats
+        async function updateStats() {
+            try {
+                // Count by status
+                const statuses = ['unverified', 'verified', 'invalid'];
+                
+                for (const status of statuses) {
+                    const queryUrl = `${REPORTS_URL}/query?where=${encodeURIComponent(`status = '${status}'`)}&returnCountOnly=true&f=json`;
+                    const response = await fetch(queryUrl);
+                    const data = await response.json();
+                    
+                    const elId = status === 'unverified' ? 'stat-pending' : `stat-${status}`;
+                    document.getElementById(elId).textContent = data.count || 0;
+                }
+                
+            } catch (error) {
+                console.error("Error updating stats:", error);
+            }
+        }
+        
+        // Show photo in modal
+        function showPhoto(url) {
+            photoModalImg.src = url;
+            photoModal.classList.add("show");
+        }
+        
+        // Open in Google Maps
+        function openMap(lat, lng) {
+            window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+        }
+        
+        // Make functions globally available
+        window.updateStatus = updateStatus;
+        window.showPhoto = showPhoto;
+        window.openMap = openMap;
+    </script>
+</body>
+</html>

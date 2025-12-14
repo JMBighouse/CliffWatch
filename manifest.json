@@ -1,0 +1,27 @@
+{
+    "name": "Cliff Watch - La Jolla Coastal Monitor",
+    "short_name": "Cliff Watch",
+    "description": "Real-time coastal landslide risk monitoring for La Jolla, California",
+    "start_url": "/index.html",
+    "display": "standalone",
+    "background_color": "#0a1628",
+    "theme_color": "#1a365d",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["weather", "utilities", "news"],
+    "lang": "en-US",
+    "dir": "ltr"
+}
