@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="en">
 <head>
     <!-- ================================================================
@@ -1117,7 +1117,7 @@
         
         /* Mini map for showing selected location */
         .location-mini-map {
-            height: 150px;
+            height: 180px;
             background: #1a202c;
             border-radius: 6px;
             margin-top: 12px;
@@ -1130,18 +1130,25 @@
             display: block;
         }
         
-        .location-mini-map img {
+        /* Container for the interactive mini MapView */
+        #mini-map-view {
             width: 100%;
             height: 100%;
-            object-fit: cover;
         }
         
-        .location-marker {
+        /* Instructions overlay for mini-map */
+        .mini-map-instructions {
             position: absolute;
-            top: 50%;
+            bottom: 8px;
             left: 50%;
-            transform: translate(-50%, -100%);
-            font-size: 32px;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 10;
         }
         
         /* Photo upload section */
@@ -1314,6 +1321,41 @@
         #report-btn.picking-mode {
             background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
             animation: none;
+        }
+        
+        /* ================================================================
+           HOME BUTTON
+           ================================================================
+           Button to return map view to La Jolla default location
+           Positioned in bottom-right, above the report button
+           ================================================================ */
+        #home-btn {
+            position: fixed;
+            bottom: 130px;
+            right: 15px;
+            z-index: 52;
+            background: rgba(26, 32, 44, 0.9);
+            border: 1px solid #4a5568;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+        }
+        
+        #home-btn:hover {
+            background: rgba(45, 55, 72, 0.95);
+            transform: scale(1.05);
+        }
+        
+        #home-btn:active {
+            transform: scale(0.95);
         }
         
         /* ================================================================
@@ -1550,6 +1592,15 @@
     </button>
     
     <!-- ================================================================
+         HOME BUTTON
+         ================================================================
+         Returns map view to La Jolla default location
+         ================================================================ -->
+    <button id="home-btn" aria-label="Return to La Jolla" title="Return to La Jolla">
+        🏠
+    </button>
+    
+    <!-- ================================================================
          INSTALL BANNER
          ================================================================
          Auto-appearing banner prompting users to install the app
@@ -1690,8 +1741,8 @@
                                 </button>
                             </div>
                             <div class="location-mini-map" id="location-mini-map">
-                                <img id="mini-map-img" src="" alt="Selected location">
-                                <div class="location-marker">📍</div>
+                                <div id="mini-map-view"></div>
+                                <div class="mini-map-instructions">Tap map to adjust pin location</div>
                             </div>
                         </div>
                     </div>
@@ -1789,11 +1840,13 @@
             "esri/Map",                    // Base map class
             "esri/views/MapView",          // 2D map view
             "esri/layers/FeatureLayer",    // For loading feature services
+            "esri/layers/GraphicsLayer",   // For mini-map pin marker
             "esri/Graphic",                // For creating graphics
             "esri/geometry/Point",         // Point geometry type
             "esri/symbols/SimpleMarkerSymbol",  // Symbol for points
+            "esri/symbols/PictureMarkerSymbol", // For pin icon
             "esri/renderers/UniqueValueRenderer" // Render by attribute value
-        ], function(Map, MapView, FeatureLayer, Graphic, Point, SimpleMarkerSymbol, UniqueValueRenderer) {
+        ], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, Point, SimpleMarkerSymbol, PictureMarkerSymbol, UniqueValueRenderer) {
             
             // =============================================================
             // CONFIGURATION - Feature Service URLs
@@ -1832,6 +1885,8 @@
             let view = null;                 // Reference to the MapView
             let monitoringLayer = null;      // Reference to monitoring points layer
             let reportsLayer = null;         // Reference to community reports layer
+            let miniMapView = null;          // Reference to mini-map MapView for location adjustment
+            let miniMapGraphicsLayer = null; // Graphics layer for mini-map pin
             
             // =============================================================
             // POPUP TEMPLATE FOR MONITORING POINTS
@@ -1969,7 +2024,7 @@
                 center: [-117.2628, 32.8498],  // La Jolla coordinates
                 zoom: 14,
                 constraints: {
-                    minZoom: 12,  // Prevent zooming out too far
+                    // minZoom removed to allow users to explore freely
                     maxZoom: 19   // Allow detailed zoom
                 },
                 popup: {
@@ -2103,6 +2158,19 @@
                 if (view.popup && view.popup.container) {
                     view.popup.container.style.zIndex = "500";
                 }
+                
+                // =============================================================
+                // HOME BUTTON - Return to La Jolla
+                // =============================================================
+                document.getElementById("home-btn").addEventListener("click", function() {
+                    view.goTo({
+                        center: [-117.2628, 32.8498],  // La Jolla coordinates
+                        zoom: 14
+                    }, {
+                        duration: 1000,  // Smooth 1-second animation
+                        easing: "ease-in-out"
+                    });
+                });
                 
                 // Load initial statistics (queries the layer directly)
                 updateStatistics();
@@ -2380,15 +2448,135 @@
                 textEl.textContent = text;
             }
             
-            // Show mini map with selected location
+            // =============================================================
+            // INTERACTIVE MINI-MAP FOR LOCATION ADJUSTMENT
+            // =============================================================
+            // Creates an interactive mini-map that allows users to tap/click
+            // to adjust the pin location after using GPS or picking from map.
+            
             function showMiniMap(lat, lon) {
-                const miniMap = document.getElementById("location-mini-map");
-                const img = document.getElementById("mini-map-img");
+                const miniMapContainer = document.getElementById("location-mini-map");
+                const miniMapViewDiv = document.getElementById("mini-map-view");
                 
-                // Use ArcGIS static map image
-                // bboxSR=4326 tells ArcGIS we're using WGS84 lat/lon coordinates
-                img.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lon-0.002},${lat-0.002},${lon+0.002},${lat+0.002}&bboxSR=4326&size=400,300&format=png&f=image`;
-                miniMap.classList.add("show");
+                // Show the container
+                miniMapContainer.classList.add("show");
+                
+                // If mini-map already exists, just update the location
+                if (miniMapView) {
+                    updateMiniMapPin(lat, lon);
+                    miniMapView.goTo({
+                        center: [lon, lat],
+                        zoom: 18
+                    });
+                    return;
+                }
+                
+                // Create graphics layer for the pin
+                miniMapGraphicsLayer = new GraphicsLayer();
+                
+                // Create the mini-map
+                const miniMap = new Map({
+                    basemap: "satellite",
+                    layers: [miniMapGraphicsLayer]
+                });
+                
+                // Create the mini-map view
+                miniMapView = new MapView({
+                    container: miniMapViewDiv,
+                    map: miniMap,
+                    center: [lon, lat],
+                    zoom: 18,
+                    constraints: {
+                        minZoom: 15,
+                        maxZoom: 20
+                    },
+                    ui: {
+                        components: []  // Hide all UI components for cleaner look
+                    },
+                    popup: {
+                        enabled: false  // Disable popups on mini-map
+                    }
+                });
+                
+                // Add the pin after view is ready
+                miniMapView.when(function() {
+                    updateMiniMapPin(lat, lon);
+                    
+                    // Handle clicks on mini-map to move pin
+                    miniMapView.on("click", function(event) {
+                        const newLat = event.mapPoint.latitude;
+                        const newLon = event.mapPoint.longitude;
+                        
+                        // Update the selected location
+                        selectedLocation = {
+                            latitude: newLat,
+                            longitude: newLon
+                        };
+                        locationAccuracy = 10;  // Manual selection accuracy
+                        
+                        // Update the pin position
+                        updateMiniMapPin(newLat, newLon);
+                        
+                        // Update the status text
+                        updateLocationStatus("success", "Location adjusted");
+                    });
+                });
+            }
+            
+            // Update the pin position on mini-map
+            function updateMiniMapPin(lat, lon) {
+                if (!miniMapGraphicsLayer) return;
+                
+                // Clear existing pin
+                miniMapGraphicsLayer.removeAll();
+                
+                // Create pin graphic
+                const pinGraphic = new Graphic({
+                    geometry: new Point({
+                        longitude: lon,
+                        latitude: lat
+                    }),
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 16,
+                        color: [255, 0, 0, 0.8],
+                        outline: {
+                            color: [255, 255, 255],
+                            width: 3
+                        }
+                    })
+                });
+                
+                // Add a larger outer ring for visibility
+                const outerRing = new Graphic({
+                    geometry: new Point({
+                        longitude: lon,
+                        latitude: lat
+                    }),
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 28,
+                        color: [255, 0, 0, 0.2],
+                        outline: {
+                            color: [255, 0, 0, 0.6],
+                            width: 2
+                        }
+                    })
+                });
+                
+                miniMapGraphicsLayer.addMany([outerRing, pinGraphic]);
+            }
+            
+            // Destroy mini-map when closing report form
+            function destroyMiniMap() {
+                if (miniMapView) {
+                    miniMapView.destroy();
+                    miniMapView = null;
+                }
+                if (miniMapGraphicsLayer) {
+                    miniMapGraphicsLayer = null;
+                }
+                document.getElementById("location-mini-map").classList.remove("show");
             }
             
             // Photo upload handling
@@ -2438,7 +2626,7 @@
                 locationAccuracy = null;
                 uploadedPhotos = [];
                 document.getElementById("photo-preview-grid").innerHTML = "";
-                document.getElementById("location-mini-map").classList.remove("show");
+                destroyMiniMap();  // Properly destroy the interactive mini-map
                 updateLocationStatus("pending", "No location selected");
                 useGpsBtn.classList.remove("active");
                 pickMapBtn.classList.remove("active");
