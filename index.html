@@ -2386,7 +2386,8 @@
                 const img = document.getElementById("mini-map-img");
                 
                 // Use ArcGIS static map image
-                img.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lon-0.001},${lat-0.001},${lon+0.001},${lat+0.001}&size=400,300&f=image`;
+                // bboxSR=4326 tells ArcGIS we're using WGS84 lat/lon coordinates
+                img.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lon-0.002},${lat-0.002},${lon+0.002},${lat+0.002}&bboxSR=4326&size=400,300&format=png&f=image`;
                 miniMap.classList.add("show");
             }
             
