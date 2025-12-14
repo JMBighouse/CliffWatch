@@ -206,7 +206,7 @@
             top: 60px;      /* Below header */
             left: 0;
             right: 0;
-            bottom: 60px;   /* Above footer */
+            bottom: 75px;   /* Above footer (includes copyright line) */
         }
         
         /* ================================================================
@@ -222,9 +222,10 @@
             right: 0;
             z-index: 100;
             background: #1a202c;
-            padding: 8px 16px;
+            padding: 8px 16px 4px 16px;
             display: flex;
             justify-content: space-around;
+            flex-wrap: wrap;
             border-top: 1px solid #2d3748;
         }
         
@@ -249,6 +250,16 @@
         .stat-elevated { color: #f6ad55; }
         .stat-medium { color: #faf089; }
         .stat-low { color: #68d391; }
+        
+        .footer-copyright {
+            width: 100%;
+            text-align: center;
+            font-size: 9px;
+            color: #718096;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid #2d3748;
+        }
         
         /* ================================================================
            CURRENT CONDITIONS WIDGET
@@ -323,6 +334,16 @@
         .condition-value.elevated { color: #f6ad55; }
         .condition-value.high { color: #fc8181; }
         .condition-value.critical { color: #ff6b6b; animation: pulse 1s infinite; }
+        
+        /* Last updated timestamp in conditions widget */
+        .conditions-updated {
+            font-size: 9px;
+            color: #718096;
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #4a5568;
+        }
         
         /* ================================================================
            POPUP STYLING - CRITICAL Z-INDEX FIX
@@ -670,7 +691,7 @@
            ================================================================ */
         .map-legend {
             position: fixed;
-            bottom: 70px;
+            bottom: 85px;
             left: 10px;
             background: rgba(26, 32, 44, 0.95);
             border-radius: 8px;
@@ -766,7 +787,7 @@
         .install-banner {
             display: none;
             position: fixed;
-            bottom: 70px;
+            bottom: 85px;
             left: 10px;
             right: 10px;
             background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
@@ -1117,7 +1138,7 @@
         
         /* Mini map for showing selected location */
         .location-mini-map {
-            height: 180px;
+            height: 150px;
             background: #1a202c;
             border-radius: 6px;
             margin-top: 12px;
@@ -1130,25 +1151,18 @@
             display: block;
         }
         
-        /* Container for the interactive mini MapView */
-        #mini-map-view {
+        .location-mini-map img {
             width: 100%;
             height: 100%;
+            object-fit: cover;
         }
         
-        /* Instructions overlay for mini-map */
-        .mini-map-instructions {
+        .location-marker {
             position: absolute;
-            bottom: 8px;
+            top: 50%;
             left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            pointer-events: none;
-            z-index: 10;
+            transform: translate(-50%, -100%);
+            font-size: 32px;
         }
         
         /* Photo upload section */
@@ -1286,7 +1300,7 @@
            ================================================================ */
         #report-btn {
             position: fixed;
-            bottom: 75px;
+            bottom: 90px;
             right: 15px;
             z-index: 52;  /* Above legend but below popup */
             background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
@@ -1321,41 +1335,6 @@
         #report-btn.picking-mode {
             background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
             animation: none;
-        }
-        
-        /* ================================================================
-           HOME BUTTON
-           ================================================================
-           Button to return map view to La Jolla default location
-           Positioned in bottom-right, above the report button
-           ================================================================ */
-        #home-btn {
-            position: fixed;
-            top: 150px;
-            left: 10px;
-            z-index: 52;
-            background: rgba(26, 32, 44, 0.9);
-            border: 1px solid #4a5568;
-            border-radius: 50%;
-            width: 44px;
-            height: 44px;
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            transition: all 0.2s;
-        }
-        
-        #home-btn:hover {
-            background: rgba(45, 55, 72, 0.95);
-            transform: scale(1.05);
-        }
-        
-        #home-btn:active {
-            transform: scale(0.95);
         }
         
         /* ================================================================
@@ -1525,6 +1504,7 @@
             <span class="condition-value" id="current-quakes">--</span>
             <span class="condition-label">Quakes</span>
         </div>
+        <div class="conditions-updated" id="conditions-updated"></div>
     </div>
     
     <!-- ================================================================
@@ -1589,15 +1569,6 @@
     <button id="report-btn" aria-label="Submit a report">
         <span class="btn-icon">📷</span>
         <span>Report</span>
-    </button>
-    
-    <!-- ================================================================
-         HOME BUTTON
-         ================================================================
-         Returns map view to La Jolla default location
-         ================================================================ -->
-    <button id="home-btn" aria-label="Return to La Jolla" title="Return to La Jolla">
-        🏠
     </button>
     
     <!-- ================================================================
@@ -1741,8 +1712,8 @@
                                 </button>
                             </div>
                             <div class="location-mini-map" id="location-mini-map">
-                                <div id="mini-map-view"></div>
-                                <div class="mini-map-instructions">Tap map to adjust pin location</div>
+                                <img id="mini-map-img" src="" alt="Selected location">
+                                <div class="location-marker">📍</div>
                             </div>
                         </div>
                     </div>
@@ -1822,6 +1793,7 @@
             <div class="stat-value" style="font-size:14px;">ℹ️</div>
             <div class="stat-label">Credits</div>
         </div>
+        <div class="footer-copyright">© JM Bighouse | Powered by Esri</div>
     </div>
 
     <!-- ================================================================
@@ -1840,13 +1812,11 @@
             "esri/Map",                    // Base map class
             "esri/views/MapView",          // 2D map view
             "esri/layers/FeatureLayer",    // For loading feature services
-            "esri/layers/GraphicsLayer",   // For mini-map pin marker
             "esri/Graphic",                // For creating graphics
             "esri/geometry/Point",         // Point geometry type
             "esri/symbols/SimpleMarkerSymbol",  // Symbol for points
-            "esri/symbols/PictureMarkerSymbol", // For pin icon
             "esri/renderers/UniqueValueRenderer" // Render by attribute value
-        ], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, Point, SimpleMarkerSymbol, PictureMarkerSymbol, UniqueValueRenderer) {
+        ], function(Map, MapView, FeatureLayer, Graphic, Point, SimpleMarkerSymbol, UniqueValueRenderer) {
             
             // =============================================================
             // CONFIGURATION - Feature Service URLs
@@ -1885,8 +1855,6 @@
             let view = null;                 // Reference to the MapView
             let monitoringLayer = null;      // Reference to monitoring points layer
             let reportsLayer = null;         // Reference to community reports layer
-            let miniMapView = null;          // Reference to mini-map MapView for location adjustment
-            let miniMapGraphicsLayer = null; // Graphics layer for mini-map pin
             
             // =============================================================
             // POPUP TEMPLATE FOR MONITORING POINTS
@@ -2024,7 +1992,7 @@
                 center: [-117.2628, 32.8498],  // La Jolla coordinates
                 zoom: 14,
                 constraints: {
-                    // minZoom removed to allow users to explore freely
+                    minZoom: 12,  // Prevent zooming out too far
                     maxZoom: 19   // Allow detailed zoom
                 },
                 popup: {
@@ -2158,19 +2126,6 @@
                 if (view.popup && view.popup.container) {
                     view.popup.container.style.zIndex = "500";
                 }
-                
-                // =============================================================
-                // HOME BUTTON - Return to La Jolla
-                // =============================================================
-                document.getElementById("home-btn").addEventListener("click", function() {
-                    view.goTo({
-                        center: [-117.2628, 32.8498],  // La Jolla coordinates
-                        zoom: 14
-                    }, {
-                        duration: 1000,  // Smooth 1-second animation
-                        easing: "ease-in-out"
-                    });
-                });
                 
                 // Load initial statistics (queries the layer directly)
                 updateStatistics();
@@ -2326,6 +2281,16 @@
                         const quakesEl = document.getElementById("current-quakes");
                         quakesEl.textContent = eq > 0 ? "M" + eq.toFixed(1) : "None";
                         quakesEl.className = "condition-value" + (eq >= 4 ? " high" : eq >= 2.5 ? " elevated" : "");
+                        
+                        // Update last updated timestamp
+                        const lastUpdate = attrs.last_update_utc;
+                        const updatedEl = document.getElementById("conditions-updated");
+                        if (lastUpdate) {
+                            const updateDate = new Date(lastUpdate);
+                            updatedEl.textContent = "Updated: " + updateDate.toLocaleString();
+                        } else {
+                            updatedEl.textContent = "";
+                        }
                     } else {
                         // No features returned - log for debugging
                         console.warn("updateConditionsWidget: No features returned from query");
@@ -2448,135 +2413,14 @@
                 textEl.textContent = text;
             }
             
-            // =============================================================
-            // INTERACTIVE MINI-MAP FOR LOCATION ADJUSTMENT
-            // =============================================================
-            // Creates an interactive mini-map that allows users to tap/click
-            // to adjust the pin location after using GPS or picking from map.
-            
+            // Show mini map with selected location
             function showMiniMap(lat, lon) {
-                const miniMapContainer = document.getElementById("location-mini-map");
-                const miniMapViewDiv = document.getElementById("mini-map-view");
+                const miniMap = document.getElementById("location-mini-map");
+                const img = document.getElementById("mini-map-img");
                 
-                // Show the container
-                miniMapContainer.classList.add("show");
-                
-                // If mini-map already exists, just update the location
-                if (miniMapView) {
-                    updateMiniMapPin(lat, lon);
-                    miniMapView.goTo({
-                        center: [lon, lat],
-                        zoom: 18
-                    });
-                    return;
-                }
-                
-                // Create graphics layer for the pin
-                miniMapGraphicsLayer = new GraphicsLayer();
-                
-                // Create the mini-map
-                const miniMap = new Map({
-                    basemap: "satellite",
-                    layers: [miniMapGraphicsLayer]
-                });
-                
-                // Create the mini-map view
-                miniMapView = new MapView({
-                    container: miniMapViewDiv,
-                    map: miniMap,
-                    center: [lon, lat],
-                    zoom: 18,
-                    constraints: {
-                        minZoom: 15,
-                        maxZoom: 20
-                    },
-                    ui: {
-                        components: []  // Hide all UI components for cleaner look
-                    },
-                    popup: {
-                        enabled: false  // Disable popups on mini-map
-                    }
-                });
-                
-                // Add the pin after view is ready
-                miniMapView.when(function() {
-                    updateMiniMapPin(lat, lon);
-                    
-                    // Handle clicks on mini-map to move pin
-                    miniMapView.on("click", function(event) {
-                        const newLat = event.mapPoint.latitude;
-                        const newLon = event.mapPoint.longitude;
-                        
-                        // Update the selected location
-                        selectedLocation = {
-                            latitude: newLat,
-                            longitude: newLon
-                        };
-                        locationAccuracy = 10;  // Manual selection accuracy
-                        
-                        // Update the pin position
-                        updateMiniMapPin(newLat, newLon);
-                        
-                        // Update the status text
-                        updateLocationStatus("success", "Location adjusted");
-                    });
-                });
-            }
-            
-            // Update the pin position on mini-map
-            function updateMiniMapPin(lat, lon) {
-                if (!miniMapGraphicsLayer) return;
-                
-                // Clear existing pin
-                miniMapGraphicsLayer.removeAll();
-                
-                // Create pin graphic
-                const pinGraphic = new Graphic({
-                    geometry: new Point({
-                        longitude: lon,
-                        latitude: lat
-                    }),
-                    symbol: new SimpleMarkerSymbol({
-                        style: "circle",
-                        size: 16,
-                        color: [255, 0, 0, 0.8],
-                        outline: {
-                            color: [255, 255, 255],
-                            width: 3
-                        }
-                    })
-                });
-                
-                // Add a larger outer ring for visibility
-                const outerRing = new Graphic({
-                    geometry: new Point({
-                        longitude: lon,
-                        latitude: lat
-                    }),
-                    symbol: new SimpleMarkerSymbol({
-                        style: "circle",
-                        size: 28,
-                        color: [255, 0, 0, 0.2],
-                        outline: {
-                            color: [255, 0, 0, 0.6],
-                            width: 2
-                        }
-                    })
-                });
-                
-                miniMapGraphicsLayer.addMany([outerRing, pinGraphic]);
-            }
-            
-            // Destroy mini-map when closing report form
-            function destroyMiniMap() {
-                if (miniMapView) {
-                    miniMapView.destroy();
-                    miniMapView = null;
-                }
-                if (miniMapGraphicsLayer) {
-                    miniMapGraphicsLayer = null;
-                }
-                document.getElementById("location-mini-map").classList.remove("show");
+                // Use ArcGIS static map image
+                img.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lon-0.001},${lat-0.001},${lon+0.001},${lat+0.001}&size=400,300&f=image`;
+                miniMap.classList.add("show");
             }
             
             // Photo upload handling
@@ -2626,7 +2470,7 @@
                 locationAccuracy = null;
                 uploadedPhotos = [];
                 document.getElementById("photo-preview-grid").innerHTML = "";
-                destroyMiniMap();  // Properly destroy the interactive mini-map
+                document.getElementById("location-mini-map").classList.remove("show");
                 updateLocationStatus("pending", "No location selected");
                 useGpsBtn.classList.remove("active");
                 pickMapBtn.classList.remove("active");
