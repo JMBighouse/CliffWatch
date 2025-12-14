@@ -1332,7 +1332,7 @@
         #home-btn {
             position: fixed;
             top: 150px;
-            left: 10px;
+            left: 15px;
             z-index: 52;
             background: rgba(26, 32, 44, 0.9);
             border: 1px solid #4a5568;
@@ -1832,6 +1832,14 @@
          and real-time updates
          ================================================================ -->
     <script>
+        // ✅ App updated timestamp (safe, runs once)
+        document.addEventListener("DOMContentLoaded", () => {
+            const el = document.getElementById("app-updated");
+            if (el) {
+                el.textContent = "App updated: " + new Date(document.lastModified).toLocaleString();
+        }
+        });
+
         // =============================================================
         // ArcGIS AMD Module Loading
         // =============================================================
