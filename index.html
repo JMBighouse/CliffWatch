@@ -1842,15 +1842,7 @@
          and real-time updates
          ================================================================ -->
     <script>
-        // ✅ App updated timestamp (safe, runs once)
-        document.addEventListener("DOMContentLoaded", () => {
-            const el = document.getElementById("app-updated");
-            if (el) {
-                el.textContent = "App updated: " + new Date(document.lastModified).toLocaleString();
-        }
-        });
-
-        // =============================================================
+                // =============================================================
         // ArcGIS AMD Module Loading
         // =============================================================
         // Load required ArcGIS modules using AMD (Asynchronous Module Definition)
@@ -2324,7 +2316,29 @@
                     if (results.features.length > 0) {
                         const attrs = results.features[0].attributes;
                         
-                        // Update rain display
+                        
+
+                        // Update data timestamp (Feature Layer last_update_utc) in Pacific Time
+                        const updatedEl = document.getElementById("app-updated");
+                        if (updatedEl) {
+                            if (attrs.last_update_utc) {
+                                const dt = new Date(attrs.last_update_utc);
+                                const fmt = new Intl.DateTimeFormat("en-US", {
+                                    timeZone: "America/Los_Angeles",
+                                    year: "numeric",
+                                    month: "2-digit",
+                                    day: "2-digit",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                    timeZoneName: "short"
+                                });
+                                updatedEl.textContent = "Data updated: " + fmt.format(dt);
+                            } else {
+                                updatedEl.textContent = "Data updated: -- (PT)";
+                            }
+                        }
+// Update rain display
                         // Use || 0 fallback for missing values
                         const rain = attrs.PRCP || 0;
                         const rainEl = document.getElementById("current-rain");
