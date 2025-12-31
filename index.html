@@ -3024,16 +3024,23 @@
                                     }
                                     const blob = new Blob([ab], { type: mimeType });
                                     
-                                    // Create File object from blob
-                                    const file = new File([blob], `photo_${i + 1}.jpg`, { type: mimeType });
+                                    // Create FormData (required by ArcGIS addAttachment)
+                                    const formData = new FormData();
+                                    formData.append('attachment', blob, `photo_${i + 1}.jpg`);
                                     
-                                    // Use ArcGIS API addAttachment method (handles auth properly)
-                                    await reportsLayer.addAttachment(
-                                        { objectId: newObjectId },
-                                        file
-                                    );
+                                    // Get the feature we just created for addAttachment
+                                    const query = reportsLayer.createQuery();
+                                    query.objectIds = [newObjectId];
+                                    query.outFields = ["*"];
+                                    const featureResult = await reportsLayer.queryFeatures(query);
                                     
-                                    console.log(`Uploaded photo ${i + 1} of ${uploadedPhotos.length}`);
+                                    if (featureResult.features.length > 0) {
+                                        const feature = featureResult.features[0];
+                                        
+                                        // Use ArcGIS addAttachment with FormData
+                                        await reportsLayer.addAttachment(feature, formData);
+                                        console.log(`Uploaded photo ${i + 1} of ${uploadedPhotos.length}`);
+                                    }
                                 } catch (photoError) {
                                     console.error(`Error uploading photo ${i + 1}:`, photoError);
                                 }
