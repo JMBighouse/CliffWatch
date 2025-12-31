@@ -1,0 +1,3267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- ================================================================
+         CLIFF WATCH - LA JOLLA COASTAL LANDSLIDE EARLY WARNING SYSTEM
+         ================================================================
+         Created by: Janna M. Bighouse
+         Purpose: Master of Science Thesis
+         Program: Geographic Information Science & Technology
+         University: University of Southern California
+         
+         This Progressive Web App (PWA) displays real-time coastal 
+         landslide risk assessments for La Jolla, CA. It integrates
+         machine learning predictions with environmental data from
+         NOAA buoys, precipitation sensors, and seismic monitors.
+         
+         Version: 12.31.25 v3 - Updated for live conditions display
+         - Shows only LIVE data (24h rain, current waves, last quake)
+         - Removed misleading multi-day rainfall estimates
+         - Added photo upload/display for community reports
+         - Updated earthquake display with date/time info
+         ================================================================ -->
+    
+    <!-- Character encoding for proper text display -->
+    <meta charset="UTF-8">
+    
+    <!-- Viewport settings for responsive mobile display
+         - width=device-width: Match screen width
+         - initial-scale=1.0: No initial zoom
+         - maximum-scale=1.0: Prevent zoom (for app-like feel)
+         - user-scalable=no: Disable pinch zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- iOS PWA settings for fullscreen app experience -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Theme color for browser chrome (Android) -->
+    <meta name="theme-color" content="#1a365d">
+    
+    <title>Cliff Watch - La Jolla Coastal Risk Monitor</title>
+    
+    <!-- PWA Manifest - defines app name, icons, and behavior when installed -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <!-- ArcGIS Maps SDK for JavaScript
+         - Provides map display, feature layers, and popup functionality
+         - Using dark theme to match app design -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark/main.css">
+    <script src="https://js.arcgis.com/4.28/"></script>
+    
+    <style>
+        /* ================================================================
+           CSS RESET & BASE STYLES
+           ================================================================
+           Reset default browser styles and set up base typography/colors
+           ================================================================ */
+        
+        /* Remove default margins/padding from all elements */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;  /* Include padding/border in width calculations */
+        }
+        
+        /* Base body styles - dark theme background */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a1628;      /* Deep navy background */
+            color: #e2e8f0;           /* Light gray text */
+            overflow: hidden;          /* Prevent body scroll (map handles scrolling) */
+        }
+        
+        /* ================================================================
+           HEADER COMPONENT
+           ================================================================
+           Fixed header at top with app branding, share button, and status badge
+           z-index: 100 ensures it stays above map and other elements
+           ================================================================ */
+        #header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        /* Logo container - holds icon and text */
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Wave emoji icon */
+        .logo-icon {
+            font-size: 28px;
+        }
+        
+        /* "Cliff Watch" title text */
+        .logo-text {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        /* "La Jolla Coastal Monitor" subtitle */
+        .logo-subtitle {
+            font-size: 11px;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+        
+        /* ================================================================
+           HEADER RIGHT SECTION
+           ================================================================
+           Contains the share button and status badge
+           ================================================================ */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* ================================================================
+           SHARE BUTTON (in header)
+           ================================================================
+           Always visible button to install app / show install instructions
+           This solves the "where is the share button?" confusion on iOS
+           ================================================================ */
+        #share-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.2s;
+        }
+        
+        #share-btn:hover {
+            background: rgba(255,255,255,0.25);
+        }
+        
+        #share-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .share-icon {
+            font-size: 16px;
+        }
+        
+        .share-text {
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        /* Hide "Install" text on very small screens, keep icon */
+        @media (max-width: 380px) {
+            .share-text {
+                display: none;
+            }
+        }
+        
+        /* ================================================================
+           STATUS BADGE
+           ================================================================
+           Shows overall risk status in header (Normal/Elevated/High/Critical)
+           Color changes based on current risk level
+           ================================================================ */
+        #status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        /* Status badge color variants */
+        .status-normal { background: #22543d; color: #9ae6b4; }      /* Green - all clear */
+        .status-elevated { background: #744210; color: #fbd38d; }    /* Orange - caution */
+        .status-high { background: #742a2a; color: #feb2b2; }        /* Red - warning */
+        .status-critical { background: #5c1a1a; color: #ff8080; animation: pulse 1s infinite; }  /* Dark red - pulsing alert */
+        
+        /* Pulsing animation for critical status */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* ================================================================
+           MAP CONTAINER
+           ================================================================
+           The main map display area - positioned between header and footer
+           ArcGIS MapView renders inside this div
+           ================================================================ */
+        #viewDiv {
+            position: fixed;
+            top: 60px;      /* Below header */
+            left: 0;
+            right: 0;
+            bottom: 60px;   /* Above footer */
+        }
+        
+        /* ================================================================
+           FOOTER STATS BAR
+           ================================================================
+           Fixed footer showing risk level counts across all monitoring points
+           z-index: 100 keeps it above the map
+           ================================================================ */
+        #footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #1a202c;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid #2d3748;
+        }
+        
+        .footer-stat {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .stat-label {
+            font-size: 10px;
+            opacity: 0.7;
+            text-transform: uppercase;
+        }
+        
+        .stat-critical { color: #ff6b6b; }
+        .stat-high { color: #fc8181; }
+        .stat-elevated { color: #f6ad55; }
+        .stat-medium { color: #faf089; }
+        .stat-low { color: #68d391; }
+        
+        /* ================================================================
+           CURRENT CONDITIONS WIDGET
+           ================================================================
+           Floating widget showing real-time environmental conditions:
+           - Wave height (from NOAA buoys)
+           - Precipitation (from weather sensors)
+           - Earthquake activity (from USGS)
+           
+           Position adjusts when alert banner is visible
+           
+           Z-INDEX: 51 - Above map, BELOW popup (500)
+           ================================================================ */
+        #conditions-widget {
+            position: fixed;
+            top: 70px;
+            right: 10px;
+            z-index: 51;  /* CHANGED from 98 - ensures popup appears above */
+            background: rgba(26, 32, 44, 0.95);
+            border-radius: 12px;
+            padding: 12px;
+            min-width: 180px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            border: 1px solid #4a5568;
+        }
+        
+        #conditions-widget.with-alert {
+            top: 110px;  /* Shift down when alert banner is shown */
+        }
+        
+        .conditions-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        .condition-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .condition-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .condition-icon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .condition-value {
+            font-weight: 600;
+            color: #e2e8f0;
+            flex: 1;
+        }
+        
+        .conditions-updated {
+            font-size: 9px;
+            color: #718096;
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #4a5568;
+        }
+
+
+        .condition-label {
+            font-size: 11px;
+            color: #718096;
+        }
+        
+        /* Condition value color variants based on severity */
+        .condition-value.elevated { color: #f6ad55; }
+        .condition-value.high { color: #fc8181; }
+        .condition-value.critical { color: #ff6b6b; animation: pulse 1s infinite; }
+        
+        /* ================================================================
+           POPUP STYLING - CRITICAL Z-INDEX FIX
+           ================================================================
+           These styles customize the ArcGIS popup appearance to match
+           the dark theme of the app. The popup displays when users tap
+           on monitoring points or community reports on the map.
+           
+           *** CRITICAL FIX FOR POPUP BEHIND LEGEND ***
+           z-index: 500 with !important ensures popup appears ABOVE:
+           - Legend (z-index: 50)
+           - Conditions widget (z-index: 51)
+           - Report button (z-index: 52)
+           But BELOW:
+           - Header/Footer (z-index: 100)
+           - Modals (z-index: 200+)
+           
+           Multiple selectors target all ArcGIS popup container elements
+           to ensure the fix works regardless of internal ArcGIS structure.
+           ================================================================ */
+        
+        /* Main popup container - HIGHEST priority for map overlays */
+        .esri-popup {
+            z-index: 500 !important;
+        }
+        
+        /* Popup outer wrapper */
+        .esri-popup__wrapper {
+            z-index: 500 !important;
+        }
+        
+        /* Popup pointer/arrow */
+        .esri-popup__pointer {
+            z-index: 500 !important;
+        }
+        
+        /* Popup main content container */
+        .esri-popup__main-container {
+            z-index: 500 !important;
+            background: #1a202c !important;
+            color: #e2e8f0 !important;
+            border-radius: 12px !important;
+            max-width: 380px !important;
+        }
+        
+        /* Ensure any ArcGIS UI popup elements have high z-index */
+        .esri-ui-corner .esri-popup {
+            z-index: 500 !important;
+        }
+        
+        /* Target the ArcGIS view UI overlay that contains popups */
+        .esri-view-surface ~ .esri-ui {
+            z-index: 500 !important;
+        }
+        
+        /* *** ADDITIONAL POPUP Z-INDEX FIX ***
+           Direct targeting of .esri-ui container and all corner positions
+           ensures popup appears above legend regardless of how ArcGIS
+           creates its internal stacking contexts. This is more reliable
+           than sibling selectors alone. */
+        .esri-ui {
+            z-index: 500 !important;
+        }
+        
+        /* Target all corner containers where popups may be positioned */
+        .esri-ui-bottom-left,
+        .esri-ui-bottom-right,
+        .esri-ui-top-left,
+        .esri-ui-top-right,
+        .esri-ui-bottom-center,
+        .esri-ui-top-center {
+            z-index: 500 !important;
+        }
+        
+        .esri-popup__header {
+            background: #2d3748 !important;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        
+        .esri-popup__header-title {
+            color: #e2e8f0 !important;
+            font-weight: 600 !important;
+        }
+        
+        .esri-popup__content {
+            padding: 16px !important;
+        }
+        
+        .esri-popup__footer {
+            background: #2d3748 !important;
+            border-radius: 0 0 12px 12px !important;
+        }
+        
+        .esri-popup__button {
+            color: #90cdf4 !important;
+        }
+        
+        .popup-content {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .popup-risk-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+        
+        .popup-risk-critical {
+            background: linear-gradient(135deg, #9b2c2c, #c53030);
+            color: white;
+            animation: pulse 1s infinite;
+        }
+        
+        .popup-risk-high {
+            background: linear-gradient(135deg, #c53030, #e53e3e);
+            color: white;
+        }
+        
+        .popup-risk-elevated {
+            background: linear-gradient(135deg, #c05621, #dd6b20);
+            color: white;
+        }
+        
+        .popup-risk-medium {
+            background: linear-gradient(135deg, #b7791f, #d69e2e);
+            color: white;
+        }
+        
+        .popup-risk-low {
+            background: linear-gradient(135deg, #276749, #38a169);
+            color: white;
+        }
+        
+        /* Popup section dividers */
+        .popup-section {
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        .popup-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .popup-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        /* Popup data rows (label: value pairs) */
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        
+        .popup-label {
+            color: #a0aec0;
+        }
+        
+        .popup-value {
+            font-weight: 500;
+            color: #e2e8f0;
+        }
+        
+        .popup-value.elevated { color: #f6ad55; }
+        .popup-value.high { color: #fc8181; }
+        .popup-value.critical { color: #ff6b6b; }
+        
+        /* Alert box within popup for threshold warnings */
+        .popup-alert {
+            background: rgba(197, 48, 48, 0.2);
+            border: 1px solid #c53030;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        
+        .popup-alert-title {
+            font-weight: 600;
+            color: #fc8181;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        
+        .popup-alert-text {
+            font-size: 12px;
+            color: #feb2b2;
+            line-height: 1.4;
+        }
+        
+        /* Citation reference in popup */
+        .popup-citation {
+            font-size: 10px;
+            color: #718096;
+            font-style: italic;
+            margin-top: 8px;
+        }
+        
+        /* ================================================================
+           REPORT STYLING (Community Reports Popup)
+           ================================================================
+           Special styling for community report popups - different from
+           monitoring point popups
+           ================================================================ */
+        .report-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .report-status.unverified {
+            background: #744210;
+            color: #fbd38d;
+        }
+        
+        .report-status.verified {
+            background: #22543d;
+            color: #9ae6b4;
+        }
+        
+        .report-description {
+            background: #2d3748;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 10px 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .report-photo {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .report-meta {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 8px;
+        }
+        
+        /* ================================================================
+           ADDITIONAL POPUP STYLES (Added 12.31.25)
+           ================================================================ */
+        
+        /* Elevated rainfall warning (orange) */
+        .popup-value.elevated {
+            color: #ed8936 !important;
+            font-weight: 600;
+        }
+
+        /* Small secondary value text */
+        .popup-value-small {
+            font-size: 11px;
+            color: #718096;
+            font-style: italic;
+        }
+
+        /* Risk reason text box */
+        .popup-reason {
+            background: #2d3748;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #e2e8f0;
+            margin-top: 6px;
+        }
+
+        /* Data source footer */
+        .popup-source {
+            font-size: 10px;
+            color: #718096;
+            margin-top: 12px;
+            padding-top: 8px;
+            border-top: 1px solid #4a5568;
+            text-align: center;
+        }
+        
+        /* Report photo gallery styles */
+        .report-photos {
+            margin-top: 12px;
+        }
+
+        .report-photos-title {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-bottom: 8px;
+        }
+
+        .report-photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+        }
+
+        .report-photo-thumb {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .report-photo-thumb:hover {
+            transform: scale(1.05);
+        }
+
+        .photo-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 600;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .photo-modal.show {
+            display: flex;
+        }
+
+        .photo-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .photo-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        /* ================================================================
+           LOADING OVERLAY
+           ================================================================
+           Full-screen overlay shown while app initializes
+           Displays spinner animation and loading text
+           ================================================================ */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a1628;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #2d3748;
+            border-top-color: #4299e1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #a0aec0;
+        }
+        
+        /* Alert Banner */
+        #alert-banner {
+            display: none;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            z-index: 99;
+            padding: 12px 16px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        #alert-banner.show { display: block; }
+        #alert-banner.critical { 
+            background: linear-gradient(135deg, #9b2c2c, #c53030);
+            animation: pulse 1s infinite;
+        }
+        #alert-banner.high { background: linear-gradient(135deg, #c53030, #e53e3e); }
+        #alert-banner.elevated { background: linear-gradient(135deg, #c05621, #dd6b20); }
+        
+        /* ================================================================
+           MAP LEGEND
+           ================================================================
+           Fixed legend showing what the map symbols mean
+           
+           *** Z-INDEX HIERARCHY (UPDATED FOR POPUP FIX) ***
+           - Map content: 0 (base)
+           - Legend: 50 (above map) <-- LOWERED from 98
+           - Conditions widget: 51
+           - Report button: 52
+           - Popup: 500 (ABOVE legend) <-- CRITICAL FIX
+           - Alert banner: 99
+           - Header/Footer: 100 (above everything except modals)
+           - Install banner: 150
+           - Report Modal: 200 (overlay)
+           - Share Modal: 250
+           - Credits Modal: 300 (top overlay)
+           - Loading: 1000
+           
+           By lowering legend to 50 and raising popup to 500,
+           the popup will ALWAYS appear above the legend.
+           ================================================================ */
+        .map-legend {
+            position: fixed;
+            bottom: 70px;
+            left: 10px;
+            background: rgba(26, 32, 44, 0.95);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 11px;
+            z-index: 50;  /* LOWERED from 98 - ensures popup (500) appears above */
+            border: 1px solid #4a5568;
+        }
+        
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #a0aec0;
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+        
+        .legend-section {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        .legend-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .legend-section-title {
+            font-size: 9px;
+            color: #718096;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+        
+        .legend-symbol {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Distinct Report Markers */
+        .legend-pin {
+            width: 14px;
+            height: 18px;
+            position: relative;
+        }
+        
+        .legend-pin-unverified {
+            background: #dd6b20;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2px dashed rgba(255,255,255,0.6);
+        }
+        
+        .legend-pin-verified {
+            background: #48bb78;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2px solid white;
+        }
+        
+        .legend-pin-verified::after {
+            content: "✓";
+            position: absolute;
+            font-size: 8px;
+            font-weight: bold;
+            color: white;
+            transform: rotate(45deg);
+            top: 2px;
+            left: 2px;
+        }
+        
+        /* ================================================================
+           INSTALL PROMPT BANNER
+           ================================================================
+           Dismissable banner that appears to prompt users to install
+           the app on their home screen. Shows different UI for:
+           - Android: "Install App" button (uses beforeinstallprompt)
+           - iOS: Step-by-step instructions for Safari
+           ================================================================ */
+        .install-banner {
+            display: none;
+            position: fixed;
+            bottom: 70px;
+            left: 10px;
+            right: 10px;
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 150;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            border: 1px solid #4a5568;
+        }
+        
+        .install-banner.show {
+            display: block;
+        }
+        
+        .install-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .install-icon {
+            font-size: 32px;
+        }
+        
+        .install-text {
+            flex: 1;
+        }
+        
+        .install-text strong {
+            display: block;
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+        
+        .install-text small {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .install-close {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        .install-close:hover { opacity: 1; }
+        
+        .install-btn {
+            display: none;
+            width: 100%;
+            margin-top: 12px;
+            padding: 12px;
+            background: #48bb78;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        /* iOS-specific install instructions (Safari doesn't support beforeinstallprompt) */
+        .ios-instructions {
+            display: none;
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .ios-instructions.show {
+            display: block;
+        }
+        
+        .ios-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .ios-step-num {
+            width: 24px;
+            height: 24px;
+            background: #4299e1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        /* ================================================================
+           SHARE/INSTALL MODAL
+           ================================================================
+           Modal that appears when user taps the share button in header
+           Shows platform-specific instructions for installing the app
+           ================================================================ */
+        .share-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 250;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .share-modal.show {
+            display: flex;
+        }
+        
+        .share-modal-content {
+            background: #1a202c;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            border: 1px solid #4a5568;
+            text-align: center;
+        }
+        
+        .share-modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .share-modal-subtitle {
+            font-size: 14px;
+            color: #a0aec0;
+            margin-bottom: 20px;
+        }
+        
+        .share-modal-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .share-modal-steps {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        
+        .share-modal-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .share-modal-step-num {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            background: #4299e1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .share-modal-note {
+            background: rgba(66, 153, 225, 0.1);
+            border: 1px solid #4299e1;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: #90cdf4;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .share-modal-close {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        /* ================================================================
+           REPORT MODAL
+           ================================================================
+           Full-screen modal for submitting community reports
+           Includes form fields, photo upload, and location picker
+           ================================================================ */
+        .report-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 200;
+            overflow-y: auto;
+        }
+        
+        .report-modal.show {
+            display: block;
+        }
+        
+        .report-modal-content {
+            background: #1a202c;
+            min-height: 100%;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+        
+        .report-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2d3748;
+        }
+        
+        .report-modal-title {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .report-modal-close {
+            background: transparent;
+            border: none;
+            color: #a0aec0;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 5px;
+        }
+        
+        /* Form styling */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #e2e8f0;
+        }
+        
+        .form-label .required {
+            color: #fc8181;
+        }
+        
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 12px;
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 16px;
+        }
+        
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23a0aec0' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 24px;
+        }
+        
+        /* Location picker section */
+        .location-picker {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .location-picker-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .location-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .location-status.pending { color: #a0aec0; }
+        .location-status.success { color: #68d391; }
+        .location-status.picking { color: #f6ad55; }
+        
+        .location-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .location-btn {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            background: #1a202c;
+            color: #e2e8f0;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .location-btn:hover {
+            background: #2d3748;
+        }
+        
+        .location-btn.active {
+            border-color: #4299e1;
+            background: rgba(66, 153, 225, 0.1);
+        }
+        
+        /* Mini map for showing selected location */
+        .location-mini-map {
+            height: 180px;
+            background: #1a202c;
+            border-radius: 6px;
+            margin-top: 12px;
+            display: none;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .location-mini-map.show {
+            display: block;
+        }
+        
+        /* Container for the interactive mini MapView */
+        #mini-map-view {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Instructions overlay for mini-map */
+        .mini-map-instructions {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Photo upload section */
+        .photo-upload {
+            border: 2px dashed #4a5568;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .photo-upload:hover {
+            border-color: #4299e1;
+            background: rgba(66, 153, 225, 0.05);
+        }
+        
+        .photo-upload-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+        
+        .photo-upload-text {
+            font-size: 14px;
+            color: #a0aec0;
+        }
+        
+        .photo-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .photo-preview {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .photo-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .photo-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.7);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Submit button */
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Success message */
+        .success-message {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+        
+        .success-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .success-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #68d391;
+        }
+        
+        .success-text {
+            font-size: 16px;
+            color: #a0aec0;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        
+        .success-close-btn {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 32px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        /* ================================================================
+           REPORT BUTTON (Floating Action Button)
+           ================================================================
+           Prominent button in bottom-right corner for submitting reports
+           Blue gradient with pulsing glow animation to attract attention
+           
+           Z-INDEX: 52 - Above legend (50) and conditions (51),
+           but below popup (500) and header (100)
+           ================================================================ */
+        #report-btn {
+            position: fixed;
+            bottom: 75px;
+            right: 15px;
+            z-index: 52;  /* Above legend but below popup */
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 20px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4);
+            animation: glow 2s ease-in-out infinite;
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 4px 15px rgba(66, 153, 225, 0.4); }
+            50% { box-shadow: 0 4px 25px rgba(66, 153, 225, 0.7); }
+        }
+        
+        #report-btn:active {
+            transform: scale(0.95);
+        }
+        
+        #report-btn .btn-icon {
+            font-size: 18px;
+        }
+        
+        /* Picking mode - changes button appearance when selecting location on map */
+        #report-btn.picking-mode {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+            animation: none;
+        }
+        
+        /* ================================================================
+           HOME BUTTON
+           ================================================================
+           Button to return map view to La Jolla default location
+           Positioned in bottom-right, above the report button
+           ================================================================ */
+        #home-btn {
+            position: fixed;
+            top: 150px;
+            left: 15px;
+            z-index: 52;
+            background: rgba(26, 32, 44, 0.9);
+            border: 1px solid #4a5568;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+        }
+        
+        #home-btn:hover {
+            background: rgba(45, 55, 72, 0.95);
+            transform: scale(1.05);
+        }
+        
+        #home-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* ================================================================
+           CREDITS MODAL
+           ================================================================
+           Modal showing app creator information and thesis attribution
+           Accessed from footer link
+           ================================================================ */
+        .credits-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .credits-modal.show {
+            display: flex;
+        }
+        
+        .credits-content {
+            background: #1a202c;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #4a5568;
+        }
+        
+        .credits-logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        .credits-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .credits-subtitle {
+            font-size: 14px;
+            color: #a0aec0;
+            margin-bottom: 24px;
+        }
+        
+        .credits-author {
+            background: rgba(66, 153, 225, 0.1);
+            border: 1px solid #4299e1;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .credits-author-label {
+            font-size: 11px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        
+        .credits-author-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #4299e1;
+        }
+        
+        .credits-affiliation {
+            font-size: 13px;
+            color: #a0aec0;
+            margin-top: 4px;
+        }
+        
+        .credits-purpose {
+            font-size: 12px;
+            color: #718096;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        
+        .credits-close-btn {
+            background: #4a5568;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 24px;
+            color: #e2e8f0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- ================================================================
+         LOADING OVERLAY
+         ================================================================
+         Full-screen loading state shown while map and data initialize
+         Hidden automatically once map is ready
+         ================================================================ -->
+    <div class="loading-overlay" id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Cliff Watch...</div>
+    </div>
+    
+    <!-- ================================================================
+         HEADER
+         ================================================================
+         Fixed header with app branding, share/install button, and status
+         The share button provides access to install instructions
+         ================================================================ -->
+    <div id="header">
+        <!-- Logo and title -->
+        <div class="logo">
+            <span class="logo-icon">🌊</span>
+            <div>
+                <div class="logo-text">Cliff Watch</div>
+                <div class="logo-subtitle">La Jolla Coastal Monitor</div>
+            </div>
+        </div>
+        
+        <!-- Right side: Share button + Status badge -->
+        <div class="header-right">
+            <!-- Share/Install button - ALWAYS VISIBLE in header -->
+            <button id="share-btn" aria-label="Install app">
+                <span class="share-icon">📤</span>
+                <span class="share-text">Install</span>
+            </button>
+            
+            <!-- Status badge showing overall risk level -->
+            <div id="status-badge" class="status-normal">
+                <span id="status-icon">✓</span>
+                <span id="status-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alert Banner - appears below header when conditions are dangerous -->
+    <div id="alert-banner"></div>
+    
+    <!-- ================================================================
+         CURRENT CONDITIONS WIDGET
+         ================================================================
+         Floating widget showing real-time environmental data
+         Updates every 2 minutes with latest readings
+         ================================================================ -->
+    <div id="conditions-widget">
+        <div class="conditions-title">🔴 Live Conditions</div>
+        <div class="condition-row">
+            <span class="condition-icon">🌧️</span>
+            <span class="condition-value" id="current-rain">--</span>
+            <span class="condition-label">24h Rain</span>
+        </div>
+        <div class="condition-row">
+            <span class="condition-icon">🌊</span>
+            <span class="condition-value" id="current-waves">--</span>
+            <span class="condition-label">Waves</span>
+        </div>
+        <div class="condition-row">
+            <span class="condition-icon">🔸</span>
+            <span class="condition-value" id="current-quakes">--</span>
+            <span class="condition-label">Last Quake</span>
+        </div>
+        <div class="conditions-updated" id="app-updated"></div>
+    </div>
+    
+    <!-- ================================================================
+         MAP CONTAINER
+         ================================================================
+         ArcGIS MapView renders here - displays monitoring points and reports
+         ================================================================ -->
+    <div id="viewDiv"></div>
+    
+    <!-- ================================================================
+         MAP LEGEND
+         ================================================================
+         Shows color coding for risk levels and report status markers
+         ================================================================ -->
+    <div class="map-legend">
+        <div class="legend-title">Legend</div>
+        
+        <!-- Risk Level Colors -->
+        <div class="legend-section">
+            <div class="legend-section-title">Risk Level</div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#ff6b6b;"></div></div>
+                <span>Critical</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#fc8181;"></div></div>
+                <span>High</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#f6ad55;"></div></div>
+                <span>Elevated</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#faf089;"></div></div>
+                <span>Medium</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div style="width:12px;height:12px;border-radius:50%;background:#68d391;"></div></div>
+                <span>Low</span>
+            </div>
+        </div>
+        
+        <!-- Community Report Markers -->
+        <div class="legend-section">
+            <div class="legend-section-title">Reports</div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div class="legend-pin legend-pin-unverified"></div></div>
+                <span>Unverified</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-symbol"><div class="legend-pin legend-pin-verified"></div></div>
+                <span>Verified</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ================================================================
+         REPORT BUTTON (Floating Action Button)
+         ================================================================
+         Prominent button for submitting community reports
+         ================================================================ -->
+    <button id="report-btn" aria-label="Submit a report">
+        <span class="btn-icon">📷</span>
+        <span>Report</span>
+    </button>
+    
+    <!-- ================================================================
+         HOME BUTTON
+         ================================================================
+         Returns map view to La Jolla default location
+         ================================================================ -->
+    <button id="home-btn" aria-label="Return to La Jolla" title="Return to La Jolla">
+        🏠
+    </button>
+    
+    <!-- ================================================================
+         INSTALL BANNER
+         ================================================================
+         Auto-appearing banner prompting users to install the app
+         Shows different content for Android vs iOS
+         ================================================================ -->
+    <div class="install-banner" id="install-banner">
+        <div class="install-header">
+            <div class="install-icon">🌊</div>
+            <div class="install-text">
+                <strong>Install Cliff Watch</strong>
+                <small>Add to home screen for quick access</small>
+            </div>
+            <button class="install-close" id="install-close">✕</button>
+        </div>
+        <!-- iOS-specific instructions (Safari doesn't support install prompt) -->
+        <div class="ios-instructions" id="ios-instructions">
+            <div class="ios-step">
+                <span class="ios-step-num">1</span>
+                <span>Tap the <strong>Share</strong> button (📤) in Safari's toolbar below</span>
+            </div>
+            <div class="ios-step">
+                <span class="ios-step-num">2</span>
+                <span>Select <strong>"Add to Home Screen"</strong></span>
+            </div>
+            <div class="ios-step">
+                <span class="ios-step-num">3</span>
+                <span>Tap <strong>Add</strong> to confirm</span>
+            </div>
+        </div>
+        <!-- Android install button (uses beforeinstallprompt API) -->
+        <button class="install-btn" id="install-btn">Install App</button>
+    </div>
+    
+    <!-- ================================================================
+         SHARE/INSTALL MODAL
+         ================================================================
+         Modal that appears when user taps the share button in header
+         Provides clear instructions for installing on any platform
+         ================================================================ -->
+    <div class="share-modal" id="share-modal">
+        <div class="share-modal-content">
+            <div class="share-modal-icon">📲</div>
+            <div class="share-modal-title">Install Cliff Watch</div>
+            <div class="share-modal-subtitle">Add to your home screen for quick access</div>
+            
+            <div class="share-modal-steps" id="share-modal-steps">
+                <!-- Steps will be populated by JavaScript based on platform -->
+            </div>
+            
+            <div class="share-modal-note">
+                <strong>💡 Tip:</strong> Once installed, Cliff Watch works like a native app with quick access from your home screen.
+            </div>
+            
+            <button class="share-modal-close" id="share-modal-close">Got it</button>
+        </div>
+    </div>
+    
+    <!-- ================================================================
+         CREDITS MODAL
+         ================================================================
+         Shows attribution and thesis information
+         ================================================================ -->
+    <div class="credits-modal" id="credits-modal">
+        <div class="credits-content">
+            <div class="credits-logo">🌊</div>
+            <div class="credits-title">Cliff Watch</div>
+            <div class="credits-subtitle">La Jolla Coastal Landslide Early Warning System</div>
+            <div class="credits-author">
+                <div class="credits-author-label">Created by</div>
+                <div class="credits-author-name">Janna M. Bighouse</div>
+                <div class="credits-affiliation">Master of Science Thesis<br>Geographic Information Science & Technology<br>University of Southern California</div>
+            </div>
+            <div class="credits-purpose">
+                This application integrates real-time environmental data with machine learning to predict coastal landslide risk, providing early warnings to protect the La Jolla community.
+            </div>
+            <button class="credits-close-btn" id="credits-close">Close</button>
+        </div>
+    </div>
+    
+    <!-- ================================================================
+         REPORT MODAL
+         ================================================================
+         Full-screen form for submitting community hazard reports
+         ================================================================ -->
+    <div class="report-modal" id="report-modal">
+        <div class="report-modal-content">
+            <!-- Report form content -->
+            <div id="report-form-container">
+                <div class="report-modal-header">
+                    <div class="report-modal-title">📷 Submit a Report</div>
+                    <button class="report-modal-close" id="report-modal-close">✕</button>
+                </div>
+                
+                <form id="report-form">
+                    <!-- Report Type -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            What are you reporting? <span class="required">*</span>
+                        </label>
+                        <select class="form-select" id="report-type" required>
+                            <option value="">Select type...</option>
+                            <option value="cliff_crack">Cliff Crack or Fracture</option>
+                            <option value="erosion">Active Erosion</option>
+                            <option value="rockfall">Recent Rockfall</option>
+                            <option value="slope_movement">Slope Movement</option>
+                            <option value="water_seepage">Water Seepage</option>
+                            <option value="other">Other Hazard</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            Description <span class="required">*</span>
+                        </label>
+                        <textarea class="form-textarea" id="report-description" 
+                            placeholder="Describe what you observed..." required></textarea>
+                    </div>
+                    
+                    <!-- Location Picker -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            Location <span class="required">*</span>
+                        </label>
+                        <div class="location-picker">
+                            <div class="location-picker-header">
+                                <div class="location-status pending" id="location-status">
+                                    <span>📍</span>
+                                    <span id="location-status-text">No location selected</span>
+                                </div>
+                            </div>
+                            <div class="location-buttons">
+                                <button type="button" class="location-btn" id="use-gps-btn">
+                                    <span>📍</span> Use My Location
+                                </button>
+                                <button type="button" class="location-btn" id="pick-map-btn">
+                                    <span>🗺️</span> Pick on Map
+                                </button>
+                            </div>
+                            <div class="location-mini-map" id="location-mini-map">
+                                <div id="mini-map-view"></div>
+                                <div class="mini-map-instructions">Tap map to adjust pin location</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Photo Upload -->
+                    <div class="form-group">
+                        <label class="form-label">Photos (optional but helpful)</label>
+                        <div class="photo-upload" id="photo-upload">
+                            <div class="photo-upload-icon">📷</div>
+                            <div class="photo-upload-text">Tap to add photos</div>
+                            <input type="file" id="photo-input" accept="image/*" multiple style="display:none">
+                        </div>
+                        <div class="photo-preview-grid" id="photo-preview-grid"></div>
+                    </div>
+                    
+                    <!-- Contact Info (Optional) -->
+                    <div class="form-group">
+                        <label class="form-label">Your Name (optional)</label>
+                        <input type="text" class="form-input" id="reporter-name" 
+                            placeholder="Anonymous if left blank">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email (optional - for follow-up)</label>
+                        <input type="email" class="form-input" id="reporter-email" 
+                            placeholder="your@email.com">
+                    </div>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit" class="submit-btn" id="submit-btn">
+                        <span>📤</span>
+                        <span>Submit Report</span>
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Success Message (shown after successful submission) -->
+            <div class="success-message" id="success-message">
+                <div class="success-icon">✅</div>
+                <div class="success-title">Report Submitted!</div>
+                <div class="success-text">
+                    Thank you for helping keep La Jolla safe. Your report is now visible on the map and will be reviewed by administrators.
+                </div>
+                <button class="success-close-btn" id="success-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ================================================================
+         FOOTER
+         ================================================================
+         Shows counts of monitoring points at each risk level
+         Credits link opens attribution modal
+         ================================================================ -->
+    <div id="footer">
+        <div class="footer-stat">
+            <div class="stat-value stat-critical" id="count-critical">0</div>
+            <div class="stat-label">Critical</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-high" id="count-high">0</div>
+            <div class="stat-label">High</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-elevated" id="count-elevated">0</div>
+            <div class="stat-label">Elevated</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-medium" id="count-medium">0</div>
+            <div class="stat-label">Medium</div>
+        </div>
+        <div class="footer-stat">
+            <div class="stat-value stat-low" id="count-low">0</div>
+            <div class="stat-label">Low</div>
+        </div>
+        <div class="footer-stat" id="credits-btn" style="cursor:pointer;">
+            <div class="stat-value" style="font-size:14px;">ℹ️</div>
+            <div class="stat-label">Credits</div>
+        </div>
+    </div>
+
+    <!-- ================================================================
+         JAVASCRIPT - APPLICATION LOGIC
+         ================================================================
+         Handles map initialization, data loading, user interactions,
+         and real-time updates
+         ================================================================ -->
+    <script>
+                // =============================================================
+        // ArcGIS AMD Module Loading
+        // =============================================================
+        // Load required ArcGIS modules using AMD (Asynchronous Module Definition)
+        // pattern. This is the standard way to use the ArcGIS JavaScript API.
+        require([
+            "esri/Map",                    // Base map class
+            "esri/views/MapView",          // 2D map view
+            "esri/layers/FeatureLayer",    // For loading feature services
+            "esri/layers/GraphicsLayer",   // For mini-map pin marker
+            "esri/Graphic",                // For creating graphics
+            "esri/geometry/Point",         // Point geometry type
+            "esri/symbols/SimpleMarkerSymbol",  // Symbol for points
+            "esri/symbols/PictureMarkerSymbol", // For pin icon
+            "esri/renderers/UniqueValueRenderer" // Render by attribute value
+        ], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, Point, SimpleMarkerSymbol, PictureMarkerSymbol, UniqueValueRenderer) {
+            
+            // =============================================================
+            // CONFIGURATION - Feature Service URLs
+            // =============================================================
+            // These URLs point to the ArcGIS Online hosted feature layers
+            // that store monitoring points and community reports
+            
+            // Monitoring Points - displays risk levels from ML model
+            const MONITORING_URL = "https://services1.arcgis.com/ZIL9uO234SBBPGL7/arcgis/rest/services/Cliffwatch_MonitoringPoints_Local/FeatureServer/1";
+            
+            // Community Reports - user-submitted hazard observations
+            const REPORTS_URL = "https://services1.arcgis.com/ZIL9uO234SBBPGL7/arcgis/rest/services/CliffWatch_CommunityReports/FeatureServer/0";
+            
+            // =============================================================
+            // RISK LEVEL COLOR SCHEME
+            // =============================================================
+            // Maps risk class names to their display colors
+            // Used for map symbology and UI elements
+            const RISK_COLORS = {
+                "Critical": "#ff6b6b",   // Bright red - highest danger
+                "High": "#fc8181",       // Light red
+                "Elevated": "#f6ad55",   // Orange
+                "Medium": "#faf089",     // Yellow
+                "Low": "#68d391"         // Green - safe
+            };
+            
+            // =============================================================
+            // APPLICATION STATE
+            // =============================================================
+            // These variables track the current state of the application
+            
+            let isPickingLocation = false;   // True when user is picking location on map
+            let selectedLocation = null;     // Stores lat/lon of selected report location
+            let locationAccuracy = null;     // GPS accuracy in meters
+            let uploadedPhotos = [];         // Array of photo data URLs
+            let view = null;                 // Reference to the MapView
+            let monitoringLayer = null;      // Reference to monitoring points layer
+            let reportsLayer = null;         // Reference to community reports layer
+            let miniMapView = null;          // Reference to mini-map MapView for location adjustment
+            let miniMapGraphicsLayer = null; // Graphics layer for mini-map pin
+            
+            // =============================================================
+            // POPUP TEMPLATE FOR MONITORING POINTS
+            // =============================================================
+            // Updated 12.31.25: Shows only LIVE/CURRENT data
+            // - 24h rainfall (accurate from MRMS)
+            // - Current wave height (live from CDIP/NDBC)
+            // - Last earthquake with date/time/magnitude
+            // =============================================================
+            function createMonitoringPopup(feature) {
+                const attrs = feature.graphic.attributes;
+                
+                // Extract values with fallbacks for missing data
+                const riskClass = attrs.risk_class || "Unknown";
+                const probability = attrs.prob_slide;
+                const probDisplay = probability ? (probability * 100).toFixed(1) + "%" : "N/A";
+                
+                // Get risk reason for detailed explanation
+                const riskReason = attrs.risk_reason || "";
+                
+                // CURRENT CONDITIONS - Live data only
+                const rain24h = attrs.PRCP || 0;                           // Live 24h from MRMS
+                const wavesNow = attrs.WVHT_mean || 0;                     // Current wave height
+                const waves3d = attrs.WVHT_mean_3d || wavesNow;            // 3-day average for context
+                const waveSource = attrs.wave_source || "Unknown";         // CDIP or NDBC
+                
+                // Earthquake info - parse the eq_latest_time_mag field
+                // Format: "2024-12-15 14:30 M3.2" or empty string
+                const eqLatest = attrs.eq_latest_time_mag || "";
+                const eqCount7d = attrs.EQ_ct_7d_50km || 0;
+                
+                // Parse earthquake string into components
+                let eqDisplay = "None in past 7 days";
+                if (eqLatest && eqLatest.length > 0) {
+                    // Parse "2024-12-15 14:30 M3.2" format
+                    const parts = eqLatest.split(" ");
+                    if (parts.length >= 3) {
+                        const dateStr = parts[0];  // "2024-12-15"
+                        const timeStr = parts[1];  // "14:30"
+                        const magStr = parts[2];   // "M3.2"
+                        
+                        // Format date nicely
+                        try {
+                            const eqDate = new Date(dateStr + "T" + timeStr + ":00Z");
+                            const now = new Date();
+                            const diffMs = now - eqDate;
+                            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                            
+                            let timeAgo;
+                            if (diffHours < 24) {
+                                timeAgo = diffHours + "h ago";
+                            } else if (diffDays === 1) {
+                                timeAgo = "Yesterday";
+                            } else if (diffDays <= 7) {
+                                timeAgo = diffDays + " days ago";
+                            } else {
+                                timeAgo = dateStr;
+                            }
+                            
+                            eqDisplay = `${magStr} - ${timeAgo}`;
+                        } catch (e) {
+                            eqDisplay = eqLatest;  // Fallback to raw string
+                        }
+                    } else {
+                        eqDisplay = eqLatest;  // Fallback to raw string
+                    }
+                }
+                
+                // Format rainfall value (mm to inches conversion)
+                const formatRain = (mm) => {
+                    if (mm === null || mm === undefined || mm === 0) return "0.0mm (0.00in)";
+                    const inches = (mm / 25.4).toFixed(2);
+                    return `${mm.toFixed(1)}mm (${inches}in)`;
+                };
+                
+                // Determine CSS class for risk badge
+                const badgeClass = `popup-risk-${riskClass.toLowerCase()}`;
+                
+                // Check for rainfall threshold alerts (USGS thresholds - 24h only)
+                let alertHtml = "";
+                if (rain24h >= 50) {
+                    alertHtml = `
+                        <div class="popup-alert">
+                            <div class="popup-alert-title">⚠️ Heavy Rainfall Alert</div>
+                            <div class="popup-alert-text">
+                                24-hour rainfall exceeds 50mm (2in) - USGS threshold for elevated landslide risk.
+                            </div>
+                        </div>
+                    `;
+                } else if (rain24h >= 25) {
+                    alertHtml = `
+                        <div class="popup-alert" style="background: rgba(237, 137, 54, 0.2); border-color: #ed8936;">
+                            <div class="popup-alert-title" style="color: #ed8936;">🌧️ Elevated Rainfall</div>
+                            <div class="popup-alert-text">
+                                24-hour rainfall exceeds 25mm (1in) - monitor conditions closely.
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Format risk reason for display (truncate if too long)
+                let reasonHtml = "";
+                if (riskReason && riskClass !== "Low") {
+                    const truncatedReason = riskReason.length > 200 
+                        ? riskReason.substring(0, 200) + "..." 
+                        : riskReason;
+                    reasonHtml = `
+                        <div class="popup-section">
+                            <div class="popup-section-title">Risk Assessment</div>
+                            <div class="popup-reason">${truncatedReason}</div>
+                        </div>
+                    `;
+                }
+                
+                // Build and return the popup HTML
+                return `
+                    <div class="popup-content">
+                        <div class="popup-risk-badge ${badgeClass}">${riskClass} Risk</div>
+                        
+                        <div class="popup-section">
+                            <div class="popup-section-title">Model Prediction</div>
+                            <div class="popup-row">
+                                <span class="popup-label">Probability:</span>
+                                <span class="popup-value">${probDisplay}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="popup-section">
+                            <div class="popup-section-title">🔴 Live Conditions</div>
+                            <div class="popup-row">
+                                <span class="popup-label">🌧️ Rain (24h):</span>
+                                <span class="popup-value ${rain24h >= 50 ? 'high' : rain24h >= 25 ? 'elevated' : ''}">${formatRain(rain24h)}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">🌊 Waves (now):</span>
+                                <span class="popup-value">${wavesNow ? wavesNow.toFixed(1) + 'm' : '--'}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">🌊 Waves (3d avg):</span>
+                                <span class="popup-value">${waves3d ? waves3d.toFixed(1) + 'm' : '--'}</span>
+                            </div>
+                            <div class="popup-row">
+                                <span class="popup-label">🔸 Last Quake:</span>
+                                <span class="popup-value">${eqDisplay}</span>
+                            </div>
+                            ${eqCount7d > 1 ? `
+                            <div class="popup-row">
+                                <span class="popup-label"></span>
+                                <span class="popup-value-small">(${eqCount7d} total in 7 days within 50km)</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${reasonHtml}
+                        ${alertHtml}
+                        
+                        <div class="popup-source">
+                            Wave data: ${waveSource} • Updated: ${attrs.last_update_utc ? new Date(attrs.last_update_utc).toLocaleString() : 'Unknown'}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // =============================================================
+            // POPUP TEMPLATE FOR COMMUNITY REPORTS
+            // =============================================================
+            // Updated 12.31.25: Added photo display from attachments
+            function createReportPopup(feature) {
+                const attrs = feature.graphic.attributes;
+                const objectId = attrs.OBJECTID;
+                
+                const reportType = attrs.report_type || "Unknown";
+                const description = attrs.description || "No description provided";
+                const status = attrs.status || "unverified";
+                const reporterName = attrs.reporter_name || "Anonymous";
+                const reportDate = attrs.report_date ? new Date(attrs.report_date).toLocaleDateString() : "Unknown date";
+                
+                // Format report type for display
+                const typeDisplay = reportType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+                
+                // Create container with unique ID for photos
+                const photoContainerId = `report-photos-${objectId}`;
+                
+                // Query attachments asynchronously after popup renders
+                setTimeout(() => {
+                    loadReportPhotos(objectId, photoContainerId);
+                }, 100);
+                
+                return `
+                    <div class="popup-content">
+                        <div class="report-status ${status}">${status}</div>
+                        <h3 style="margin: 10px 0 5px 0;">${typeDisplay}</h3>
+                        <div class="report-description">${description}</div>
+                        <div class="report-meta">
+                            Reported by ${reporterName} on ${reportDate}
+                        </div>
+                        <div id="${photoContainerId}" class="report-photos">
+                            <div class="report-photos-title" style="font-size:11px;color:#718096;">Loading photos...</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Function to load and display report photos from attachments
+            async function loadReportPhotos(objectId, containerId) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                
+                try {
+                    // Query attachments for this feature
+                    const attachmentInfos = await reportsLayer.queryAttachments({
+                        objectIds: [objectId]
+                    });
+                    
+                    const attachments = attachmentInfos[objectId] || [];
+                    
+                    if (attachments.length === 0) {
+                        container.innerHTML = ''; // No photos, hide section
+                        return;
+                    }
+                    
+                    // Build photo gallery HTML
+                    let photosHtml = '<div class="report-photos-title">📷 Photos (' + attachments.length + ')</div>';
+                    photosHtml += '<div class="report-photo-grid">';
+                    
+                    attachments.forEach((att, index) => {
+                        const photoUrl = reportsLayer.url + '/' + objectId + '/attachments/' + att.id;
+                        photosHtml += `
+                            <img src="${photoUrl}" 
+                                 alt="Report photo ${index + 1}" 
+                                 class="report-photo-thumb"
+                                 onclick="showPhotoModal('${photoUrl}')"
+                                 loading="lazy">
+                        `;
+                    });
+                    
+                    photosHtml += '</div>';
+                    container.innerHTML = photosHtml;
+                    
+                } catch (error) {
+                    console.error('Error loading photos:', error);
+                    container.innerHTML = ''; // Hide on error
+                }
+            }
+            
+            // Photo modal function (global scope)
+            window.showPhotoModal = function(url) {
+                let modal = document.getElementById('photo-fullscreen-modal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'photo-fullscreen-modal';
+                    modal.className = 'photo-modal';
+                    modal.innerHTML = `
+                        <button class="photo-modal-close" onclick="this.parentElement.classList.remove('show')">✕</button>
+                        <img src="" alt="Full size photo">
+                    `;
+                    modal.addEventListener('click', function(e) {
+                        if (e.target === modal) modal.classList.remove('show');
+                    });
+                    document.body.appendChild(modal);
+                }
+                modal.querySelector('img').src = url;
+                modal.classList.add('show');
+            };
+            
+            // =============================================================
+            // MAP INITIALIZATION
+            // =============================================================
+            // Create the map with satellite imagery basemap
+            const map = new Map({
+                basemap: "satellite"  // High-resolution satellite imagery
+            });
+            
+            // Create the map view centered on La Jolla
+            view = new MapView({
+                container: "viewDiv",
+                map: map,
+                center: [-117.2628, 32.8498],  // La Jolla coordinates
+                zoom: 14,
+                constraints: {
+                    // minZoom removed to allow users to explore freely
+                    maxZoom: 19   // Allow detailed zoom
+                },
+                popup: {
+                    // *** POPUP DISPLAY FIX ***
+                    // Floating popup that can be freely dragged anywhere on the map.
+                    // dockEnabled: false - keeps popup floating near clicked point
+                    // dockOptions.buttonEnabled: false - removes the dock button from
+                    //   the popup header so users can't dock it to preset positions.
+                    // dragEnabled: true - allows user to click/touch and drag the
+                    //   popup to any position on the screen (desktop and mobile).
+                    dockEnabled: false,
+                    dockOptions: {
+                        buttonEnabled: false
+                    },
+                    collapseEnabled: false,
+                    dragEnabled: true
+                }
+            });
+            
+            // =============================================================
+            // MONITORING POINTS LAYER
+            // =============================================================
+            // Create renderer with unique colors for each risk level
+            const monitoringRenderer = new UniqueValueRenderer({
+                field: "risk_class",
+                defaultSymbol: new SimpleMarkerSymbol({
+                    style: "circle",
+                    size: 8,
+                    color: "#888888",
+                    outline: { color: "white", width: 1 }
+                }),
+                uniqueValueInfos: Object.entries(RISK_COLORS).map(([value, color]) => ({
+                    value: value,
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 10,
+                        color: color,
+                        outline: { color: "white", width: 1 }
+                    })
+                }))
+            });
+            
+            monitoringLayer = new FeatureLayer({
+                url: MONITORING_URL,
+                title: "Monitoring Points",
+                renderer: monitoringRenderer,
+                popupTemplate: {
+                    title: "Monitoring Point",
+                    content: createMonitoringPopup
+                },
+                outFields: ["*"]  // Load all fields for popup
+            });
+            
+            map.add(monitoringLayer);
+            
+            // =============================================================
+            // COMMUNITY REPORTS LAYER
+            // =============================================================
+            // Create distinct markers for verified vs unverified reports
+            const reportsRenderer = new UniqueValueRenderer({
+                field: "status",
+                defaultSymbol: new SimpleMarkerSymbol({
+                    style: "diamond",
+                    size: 14,
+                    color: "#dd6b20",
+                    outline: { color: "white", width: 2, style: "dash" }
+                }),
+                uniqueValueInfos: [
+                    {
+                        value: "unverified",
+                        symbol: new SimpleMarkerSymbol({
+                            style: "diamond",
+                            size: 14,
+                            color: "#dd6b20",  // Orange
+                            outline: { color: "white", width: 2, style: "dash" }
+                        })
+                    },
+                    {
+                        value: "verified",
+                        symbol: new SimpleMarkerSymbol({
+                            style: "diamond",
+                            size: 14,
+                            color: "#48bb78",  // Green
+                            outline: { color: "white", width: 2 }
+                        })
+                    }
+                ]
+            });
+            
+            reportsLayer = new FeatureLayer({
+                url: REPORTS_URL,
+                title: "Community Reports",
+                renderer: reportsRenderer,
+                definitionExpression: "status IN ('unverified', 'verified')",  // Hide invalid reports
+                popupTemplate: {
+                    title: "Community Report",
+                    content: createReportPopup
+                },
+                outFields: ["*"]
+            });
+            
+            map.add(reportsLayer);
+            
+            // =============================================================
+            // MAP READY HANDLER
+            // =============================================================
+            view.when(function() {
+                // Hide loading overlay once map is ready
+                document.getElementById("loading").classList.add("hidden");
+                
+                // *** POPUP CONFIGURATION FIX ***
+                // Set popup properties directly on the view.popup instance
+                // after the view loads. This is more reliable than setting
+                // them in the MapView constructor options.
+                // - dockEnabled: false - keeps popup floating, not snapped to edges
+                // - buttonEnabled: false - removes dock button from header
+                // - breakpoint: false - prevents auto-docking on small screens
+                // - collapseEnabled: false - prevents collapsing to minimal state
+                // With these settings, the popup appears near the clicked point
+                // and can be freely dragged anywhere on the map.
+                view.popup.dockEnabled = false;
+                view.popup.dockOptions = {
+                    buttonEnabled: false,
+                    breakpoint: false
+                };
+                view.popup.collapseEnabled = false;
+                
+                // *** POPUP Z-INDEX FIX (JavaScript) ***
+                // Programmatically ensure popup container has high z-index
+                // This complements the CSS fix for maximum reliability
+                if (view.popup && view.popup.container) {
+                    view.popup.container.style.zIndex = "500";
+                }
+                
+                // =============================================================
+                // HOME BUTTON - Return to La Jolla
+                // =============================================================
+                document.getElementById("home-btn").addEventListener("click", function() {
+                    view.goTo({
+                        center: [-117.2628, 32.8498],  // La Jolla coordinates
+                        zoom: 14
+                    }, {
+                        duration: 1000,  // Smooth 1-second animation
+                        easing: "ease-in-out"
+                    });
+                });
+                
+                // Load initial statistics (queries the layer directly)
+                updateStatistics();
+                
+                // *** CURRENT CONDITIONS FIX ***
+                // Wait for monitoring layer to fully load before querying
+                // for condition data. Previously, updateConditionsWidget()
+                // was called immediately when the view was ready, but the
+                // layer's features may not have been loaded yet, resulting
+                // in empty/null values ("--" displayed instead of numbers).
+                monitoringLayer.when(function() {
+                    console.log("Monitoring layer loaded - fetching conditions");
+                    updateConditionsWidget();
+                }).catch(function(error) {
+                    console.error("Error loading monitoring layer:", error);
+                });
+                
+                // Set up periodic refresh (every 2 minutes)
+                setInterval(function() {
+                    monitoringLayer.refresh();
+                    reportsLayer.refresh();
+                    updateStatistics();
+                    updateConditionsWidget();
+                }, 120000);
+            });
+            
+            // =============================================================
+            // UPDATE STATISTICS
+            // =============================================================
+            // Query monitoring layer to count points at each risk level
+            function updateStatistics() {
+                const statsQuery = monitoringLayer.createQuery();
+                statsQuery.where = "1=1";
+                statsQuery.outFields = ["risk_class"];
+                statsQuery.returnGeometry = false;
+                
+                monitoringLayer.queryFeatures(statsQuery).then(function(results) {
+                    const counts = {
+                        Critical: 0,
+                        High: 0,
+                        Elevated: 0,
+                        Medium: 0,
+                        Low: 0
+                    };
+                    
+                    results.features.forEach(function(feature) {
+                        const riskClass = feature.attributes.risk_class;
+                        if (counts.hasOwnProperty(riskClass)) {
+                            counts[riskClass]++;
+                        }
+                    });
+                    
+                    // Update footer display
+                    document.getElementById("count-critical").textContent = counts.Critical;
+                    document.getElementById("count-high").textContent = counts.High;
+                    document.getElementById("count-elevated").textContent = counts.Elevated;
+                    document.getElementById("count-medium").textContent = counts.Medium;
+                    document.getElementById("count-low").textContent = counts.Low;
+                    
+                    // Update header status badge
+                    updateStatusBadge(counts);
+                });
+            }
+            
+            // =============================================================
+            // UPDATE STATUS BADGE
+            // =============================================================
+            // Set header badge color based on highest risk level present
+            function updateStatusBadge(counts) {
+                const badge = document.getElementById("status-badge");
+                const icon = document.getElementById("status-icon");
+                const text = document.getElementById("status-text");
+                
+                // Remove existing status classes
+                badge.className = "";
+                
+                if (counts.Critical > 0) {
+                    badge.classList.add("status-critical");
+                    icon.textContent = "⚠️";
+                    text.textContent = "Critical Risk";
+                    showAlertBanner("critical", `⚠️ ${counts.Critical} areas at CRITICAL risk`);
+                } else if (counts.High > 0) {
+                    badge.classList.add("status-high");
+                    icon.textContent = "⚠️";
+                    text.textContent = "High Risk";
+                    showAlertBanner("high", `⚠️ ${counts.High} areas at HIGH risk`);
+                } else if (counts.Elevated > 0) {
+                    badge.classList.add("status-elevated");
+                    icon.textContent = "⚡";
+                    text.textContent = "Elevated";
+                    showAlertBanner("elevated", `⚡ ${counts.Elevated} areas at ELEVATED risk`);
+                } else {
+                    badge.classList.add("status-normal");
+                    icon.textContent = "✓";
+                    text.textContent = "Normal";
+                    hideAlertBanner();
+                }
+            }
+            
+            // =============================================================
+            // ALERT BANNER
+            // =============================================================
+            function showAlertBanner(level, message) {
+                const banner = document.getElementById("alert-banner");
+                banner.className = `show ${level}`;
+                banner.textContent = message;
+                document.getElementById("conditions-widget").classList.add("with-alert");
+            }
+            
+            function hideAlertBanner() {
+                const banner = document.getElementById("alert-banner");
+                banner.className = "";
+                document.getElementById("conditions-widget").classList.remove("with-alert");
+            }
+            
+            // =============================================================
+            // UPDATE CONDITIONS WIDGET
+            // =============================================================
+            // Query one monitoring point to get current environmental readings
+            // *** FIELD NAMES FIXED to match actual feature layer schema ***
+            function updateConditionsWidget() {
+                const query = monitoringLayer.createQuery();
+                query.where = "1=1";
+                query.num = 1;
+                // Use correct field names from the feature layer:
+                // - PRCP (not PRCP_24h)
+                // - WVHT_mean_3d with WVHT_mean as fallback
+                // - EQ_maxM_7d_50km (max magnitude)
+                // - eq_latest_time_mag (last earthquake date/time/magnitude)
+                query.outFields = ["PRCP", "WVHT_mean_3d", "WVHT_mean", "EQ_maxM_7d_50km", "EQ_ct_7d_50km", "eq_latest_time_mag", "last_update_utc"];
+                
+                monitoringLayer.queryFeatures(query).then(function(results) {
+                    if (results.features.length > 0) {
+                        const attrs = results.features[0].attributes;
+                        
+                        
+
+                        // Update data timestamp (Feature Layer last_update_utc) in Pacific Time
+                        const updatedEl = document.getElementById("app-updated");
+                        if (updatedEl) {
+                            if (attrs.last_update_utc) {
+                                const dt = new Date(attrs.last_update_utc);
+                                const fmt = new Intl.DateTimeFormat("en-US", {
+                                    timeZone: "America/Los_Angeles",
+                                    year: "numeric",
+                                    month: "2-digit",
+                                    day: "2-digit",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                    timeZoneName: "short"
+                                });
+                                updatedEl.textContent = "Data updated: " + fmt.format(dt);
+                            } else {
+                                updatedEl.textContent = "Data updated: -- (PT)";
+                            }
+                        }
+// Update rain display
+                        // Use || 0 fallback for missing values
+                        const rain = attrs.PRCP || 0;
+                        const rainEl = document.getElementById("current-rain");
+                        const rainIn = (rain / 25.4).toFixed(2);
+                        rainEl.textContent = rain.toFixed(1) + "mm (" + rainIn + "in)";
+                        rainEl.className = "condition-value" + (rain >= 50 ? " high" : rain >= 25 ? " elevated" : "");
+                        
+                        // Update waves display
+                        // Use WVHT_mean_3d with WVHT_mean as fallback
+                        const waves = attrs.WVHT_mean_3d || attrs.WVHT_mean || 0;
+                        const wavesEl = document.getElementById("current-waves");
+                        wavesEl.textContent = waves.toFixed(1) + "m";
+                        wavesEl.className = "condition-value" + (waves >= 3 ? " high" : waves >= 2 ? " elevated" : "");
+                        
+                        // Update seismic/quakes display with last quake date
+                        const eq = attrs.EQ_maxM_7d_50km || 0;
+                        const eqLatest = attrs.eq_latest_time_mag || "";
+                        const quakesEl = document.getElementById("current-quakes");
+                        
+                        if (eqLatest && eqLatest.length > 0) {
+                            // Parse "2024-12-15 14:30 M3.2" format
+                            const parts = eqLatest.split(" ");
+                            if (parts.length >= 3) {
+                                const dateStr = parts[0];
+                                const timeStr = parts[1];
+                                const magStr = parts[2];
+                                
+                                try {
+                                    const eqDate = new Date(dateStr + "T" + timeStr + ":00Z");
+                                    const now = new Date();
+                                    const diffMs = now - eqDate;
+                                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                                    
+                                    let timeAgo;
+                                    if (diffHours < 24) {
+                                        timeAgo = diffHours + "h ago";
+                                    } else if (diffDays === 1) {
+                                        timeAgo = "Yesterday";
+                                    } else if (diffDays <= 7) {
+                                        timeAgo = diffDays + "d ago";
+                                    } else {
+                                        timeAgo = "";
+                                    }
+                                    
+                                    quakesEl.textContent = timeAgo ? `${magStr} (${timeAgo})` : magStr;
+                                } catch (e) {
+                                    quakesEl.textContent = eq > 0 ? "M" + eq.toFixed(1) : "None";
+                                }
+                            } else {
+                                quakesEl.textContent = eq > 0 ? "M" + eq.toFixed(1) : "None";
+                            }
+                        } else {
+                            quakesEl.textContent = eq > 0 ? "M" + eq.toFixed(1) : "None";
+                        }
+                        quakesEl.className = "condition-value" + (eq >= 4 ? " high" : eq >= 2.5 ? " elevated" : "");
+                    } else {
+                        // No features returned - log for debugging
+                        console.warn("updateConditionsWidget: No features returned from query");
+                    }
+                }).catch(function(error) {
+                    // *** ERROR HANDLING ***
+                    // Log query failures for debugging. Values will remain
+                    // as "--" if query fails, which is acceptable fallback.
+                    console.error("Failed to query conditions data:", error);
+                });
+            }
+            
+            // =============================================================
+            // REPORT SUBMISSION
+            // =============================================================
+            const reportBtn = document.getElementById("report-btn");
+            const reportModal = document.getElementById("report-modal");
+            const reportModalClose = document.getElementById("report-modal-close");
+            const reportForm = document.getElementById("report-form");
+            const useGpsBtn = document.getElementById("use-gps-btn");
+            const pickMapBtn = document.getElementById("pick-map-btn");
+            const photoUpload = document.getElementById("photo-upload");
+            const photoInput = document.getElementById("photo-input");
+            const successMessage = document.getElementById("success-message");
+            const successCloseBtn = document.getElementById("success-close-btn");
+            
+            // Open report modal
+            reportBtn.addEventListener("click", function() {
+                if (isPickingLocation) {
+                    // Cancel picking mode
+                    isPickingLocation = false;
+                    reportBtn.classList.remove("picking-mode");
+                    reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+                } else {
+                    reportModal.classList.add("show");
+                    resetReportForm();
+                }
+            });
+            
+            // Close report modal
+            reportModalClose.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                cancelPickingMode();
+            });
+            
+            // Use GPS location
+            useGpsBtn.addEventListener("click", function() {
+                if (!navigator.geolocation) {
+                    alert("Geolocation is not supported by your browser");
+                    return;
+                }
+                
+                updateLocationStatus("pending", "Getting location...");
+                
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        selectedLocation = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                        locationAccuracy = position.coords.accuracy;
+                        
+                        updateLocationStatus("success", `Location found (±${Math.round(locationAccuracy)}m)`);
+                        showMiniMap(selectedLocation.latitude, selectedLocation.longitude);
+                        useGpsBtn.classList.add("active");
+                        pickMapBtn.classList.remove("active");
+                    },
+                    function(error) {
+                        let message = "Unable to get location";
+                        if (error.code === error.PERMISSION_DENIED) {
+                            message = "Location permission denied. Please enable in settings.";
+                        }
+                        updateLocationStatus("pending", message);
+                        alert(message);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            });
+            
+            // Pick location on map
+            pickMapBtn.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                isPickingLocation = true;
+                reportBtn.classList.add("picking-mode");
+                reportBtn.innerHTML = '<span class="btn-icon">✕</span><span>Cancel</span>';
+                
+                // Show instruction
+                alert("Tap on the map to select the location of the hazard");
+            });
+            
+            // Handle map click for location picking
+            view.on("click", function(event) {
+                if (!isPickingLocation) return;
+                
+                selectedLocation = {
+                    latitude: event.mapPoint.latitude,
+                    longitude: event.mapPoint.longitude
+                };
+                locationAccuracy = 10;  // Assume 10m accuracy for map picks
+                
+                // Exit picking mode
+                isPickingLocation = false;
+                reportBtn.classList.remove("picking-mode");
+                reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+                
+                // Reopen modal
+                reportModal.classList.add("show");
+                updateLocationStatus("success", "Location selected from map");
+                showMiniMap(selectedLocation.latitude, selectedLocation.longitude);
+                pickMapBtn.classList.add("active");
+                useGpsBtn.classList.remove("active");
+            });
+            
+            // Update location status display
+            function updateLocationStatus(status, text) {
+                const statusEl = document.getElementById("location-status");
+                const textEl = document.getElementById("location-status-text");
+                
+                statusEl.className = `location-status ${status}`;
+                textEl.textContent = text;
+            }
+            
+            // =============================================================
+            // INTERACTIVE MINI-MAP FOR LOCATION ADJUSTMENT
+            // =============================================================
+            // Creates an interactive mini-map that allows users to tap/click
+            // to adjust the pin location after using GPS or picking from map.
+            
+            function showMiniMap(lat, lon) {
+                const miniMapContainer = document.getElementById("location-mini-map");
+                const miniMapViewDiv = document.getElementById("mini-map-view");
+                
+                // Show the container
+                miniMapContainer.classList.add("show");
+                
+                // If mini-map already exists, just update the location
+                if (miniMapView) {
+                    updateMiniMapPin(lat, lon);
+                    miniMapView.goTo({
+                        center: [lon, lat],
+                        zoom: 18
+                    });
+                    return;
+                }
+                
+                // Create graphics layer for the pin
+                miniMapGraphicsLayer = new GraphicsLayer();
+                
+                // Create the mini-map
+                const miniMap = new Map({
+                    basemap: "satellite",
+                    layers: [miniMapGraphicsLayer]
+                });
+                
+                // Create the mini-map view
+                miniMapView = new MapView({
+                    container: miniMapViewDiv,
+                    map: miniMap,
+                    center: [lon, lat],
+                    zoom: 18,
+                    constraints: {
+                        minZoom: 15,
+                        maxZoom: 20
+                    },
+                    ui: {
+                        components: []  // Hide all UI components for cleaner look
+                    },
+                    popup: {
+                        enabled: false  // Disable popups on mini-map
+                    }
+                });
+                
+                // Add the pin after view is ready
+                miniMapView.when(function() {
+                    updateMiniMapPin(lat, lon);
+                    
+                    // Handle clicks on mini-map to move pin
+                    miniMapView.on("click", function(event) {
+                        const newLat = event.mapPoint.latitude;
+                        const newLon = event.mapPoint.longitude;
+                        
+                        // Update the selected location
+                        selectedLocation = {
+                            latitude: newLat,
+                            longitude: newLon
+                        };
+                        locationAccuracy = 10;  // Manual selection accuracy
+                        
+                        // Update the pin position
+                        updateMiniMapPin(newLat, newLon);
+                        
+                        // Update the status text
+                        updateLocationStatus("success", "Location adjusted");
+                    });
+                });
+            }
+            
+            // Update the pin position on mini-map
+            function updateMiniMapPin(lat, lon) {
+                if (!miniMapGraphicsLayer) return;
+                
+                // Clear existing pin
+                miniMapGraphicsLayer.removeAll();
+                
+                // Create pin graphic
+                const pinGraphic = new Graphic({
+                    geometry: new Point({
+                        longitude: lon,
+                        latitude: lat
+                    }),
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 16,
+                        color: [255, 0, 0, 0.8],
+                        outline: {
+                            color: [255, 255, 255],
+                            width: 3
+                        }
+                    })
+                });
+                
+                // Add a larger outer ring for visibility
+                const outerRing = new Graphic({
+                    geometry: new Point({
+                        longitude: lon,
+                        latitude: lat
+                    }),
+                    symbol: new SimpleMarkerSymbol({
+                        style: "circle",
+                        size: 28,
+                        color: [255, 0, 0, 0.2],
+                        outline: {
+                            color: [255, 0, 0, 0.6],
+                            width: 2
+                        }
+                    })
+                });
+                
+                miniMapGraphicsLayer.addMany([outerRing, pinGraphic]);
+            }
+            
+            // Destroy mini-map when closing report form
+            function destroyMiniMap() {
+                if (miniMapView) {
+                    miniMapView.destroy();
+                    miniMapView = null;
+                }
+                if (miniMapGraphicsLayer) {
+                    miniMapGraphicsLayer = null;
+                }
+                document.getElementById("location-mini-map").classList.remove("show");
+            }
+            
+            // Photo upload handling
+            photoUpload.addEventListener("click", function() {
+                photoInput.click();
+            });
+            
+            photoInput.addEventListener("change", function(e) {
+                const files = Array.from(e.target.files);
+                const maxPhotos = 5;
+                
+                if (uploadedPhotos.length + files.length > maxPhotos) {
+                    alert(`Maximum ${maxPhotos} photos allowed`);
+                    return;
+                }
+                
+                files.forEach(function(file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        uploadedPhotos.push(e.target.result);
+                        renderPhotoPreview();
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+            
+            function renderPhotoPreview() {
+                const grid = document.getElementById("photo-preview-grid");
+                grid.innerHTML = uploadedPhotos.map((photo, index) => `
+                    <div class="photo-preview">
+                        <img src="${photo}" alt="Preview ${index + 1}">
+                        <button class="photo-remove" onclick="removePhoto(${index})">✕</button>
+                    </div>
+                `).join("");
+            }
+            
+            // Make removePhoto available globally
+            window.removePhoto = function(index) {
+                uploadedPhotos.splice(index, 1);
+                renderPhotoPreview();
+            };
+            
+            // Reset form
+            function resetReportForm() {
+                reportForm.reset();
+                selectedLocation = null;
+                locationAccuracy = null;
+                uploadedPhotos = [];
+                document.getElementById("photo-preview-grid").innerHTML = "";
+                destroyMiniMap();  // Properly destroy the interactive mini-map
+                updateLocationStatus("pending", "No location selected");
+                useGpsBtn.classList.remove("active");
+                pickMapBtn.classList.remove("active");
+                document.getElementById("report-form-container").style.display = "block";
+                successMessage.classList.remove("show");
+            }
+            
+            function cancelPickingMode() {
+                if (isPickingLocation) {
+                    isPickingLocation = false;
+                    reportBtn.classList.remove("picking-mode");
+                    reportBtn.innerHTML = '<span class="btn-icon">📷</span><span>Report</span>';
+                }
+            }
+            
+            // Form submission
+            reportForm.addEventListener("submit", async function(e) {
+                e.preventDefault();
+                
+                if (!selectedLocation) {
+                    alert("Please select a location for your report");
+                    return;
+                }
+                
+                const submitBtn = document.getElementById("submit-btn");
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span>Submitting...</span>';
+                
+                try {
+                    // Create the feature
+                    const feature = {
+                        geometry: {
+                            type: "point",
+                            latitude: selectedLocation.latitude,
+                            longitude: selectedLocation.longitude
+                        },
+                        attributes: {
+                            report_type: document.getElementById("report-type").value,
+                            description: document.getElementById("report-description").value,
+                            reporter_name: document.getElementById("reporter-name").value || "Anonymous",
+                            reporter_email: document.getElementById("reporter-email").value || null,
+                            report_date: Date.now(),
+                            status: "unverified",
+                            location_accuracy: locationAccuracy
+                        }
+                    };
+                    
+                    // Add to feature layer
+                    const result = await reportsLayer.applyEdits({
+                        addFeatures: [new Graphic(feature)]
+                    });
+                    
+                    if (result.addFeatureResults.length > 0 && !result.addFeatureResults[0].error) {
+                        const newObjectId = result.addFeatureResults[0].objectId;
+                        
+                        // Upload photos as attachments if any
+                        if (uploadedPhotos.length > 0) {
+                            submitBtn.innerHTML = '<span>Uploading photos...</span>';
+                            
+                            for (let i = 0; i < uploadedPhotos.length; i++) {
+                                try {
+                                    // Convert base64 data URL to blob
+                                    const base64Data = uploadedPhotos[i];
+                                    const byteString = atob(base64Data.split(',')[1]);
+                                    const mimeType = base64Data.split(',')[0].split(':')[1].split(';')[0];
+                                    const ab = new ArrayBuffer(byteString.length);
+                                    const ia = new Uint8Array(ab);
+                                    for (let j = 0; j < byteString.length; j++) {
+                                        ia[j] = byteString.charCodeAt(j);
+                                    }
+                                    const blob = new Blob([ab], { type: mimeType });
+                                    
+                                    // Create File object from blob
+                                    const file = new File([blob], `photo_${i + 1}.jpg`, { type: mimeType });
+                                    
+                                    // Use ArcGIS API addAttachment method (handles auth properly)
+                                    await reportsLayer.addAttachment(
+                                        { objectId: newObjectId },
+                                        file
+                                    );
+                                    
+                                    console.log(`Uploaded photo ${i + 1} of ${uploadedPhotos.length}`);
+                                } catch (photoError) {
+                                    console.error(`Error uploading photo ${i + 1}:`, photoError);
+                                }
+                            }
+                        }
+                        
+                        // Success!
+                        document.getElementById("report-form-container").style.display = "none";
+                        successMessage.classList.add("show");
+                        
+                        // Refresh the reports layer
+                        reportsLayer.refresh();
+                    } else {
+                        throw new Error("Failed to submit report");
+                    }
+                } catch (error) {
+                    console.error("Error submitting report:", error);
+                    alert("Error submitting report. Please try again.");
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>📤</span><span>Submit Report</span>';
+                }
+            });
+            
+            // Success close button
+            successCloseBtn.addEventListener("click", function() {
+                reportModal.classList.remove("show");
+                resetReportForm();
+            });
+        });
+        
+        // =============================================================
+        // SHARE BUTTON / INSTALL MODAL
+        // =============================================================
+        // This provides an always-accessible way for users to see
+        // install instructions, solving the "where is the share button?"
+        // confusion that occurs when the install banner mentions Safari's
+        // share button but users don't know where to find it.
+        (function() {
+            const shareBtn = document.getElementById("share-btn");
+            const shareModal = document.getElementById("share-modal");
+            const shareModalClose = document.getElementById("share-modal-close");
+            const shareModalSteps = document.getElementById("share-modal-steps");
+            
+            function isIOS() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            }
+            
+            function isAndroid() {
+                return /Android/.test(navigator.userAgent);
+            }
+            
+            function isInStandaloneMode() {
+                return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+            }
+            
+            // Populate steps based on platform
+            function populateShareSteps() {
+                if (isInStandaloneMode()) {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">✓</div>
+                            <div><strong>Already installed!</strong><br>You're using Cliff Watch as an app.</div>
+                        </div>
+                    `;
+                } else if (isIOS()) {
+                    // iOS-specific instructions pointing to Safari's native share button
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Look for Safari's <strong>Share button</strong> (📤) at the <strong>bottom</strong> of your screen in the browser toolbar</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Scroll down and tap <strong>"Add to Home Screen"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>Tap <strong>Add</strong> in the top right corner</div>
+                        </div>
+                    `;
+                } else if (isAndroid()) {
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Tap the <strong>menu button</strong> (⋮) in your browser</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Select <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>Tap <strong>Install</strong> to confirm</div>
+                        </div>
+                    `;
+                } else {
+                    // Desktop
+                    shareModalSteps.innerHTML = `
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">1</div>
+                            <div>Look for the <strong>install icon</strong> (⊕) in your browser's address bar</div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">2</div>
+                            <div>Click it and select <strong>"Install"</strong></div>
+                        </div>
+                        <div class="share-modal-step">
+                            <div class="share-modal-step-num">3</div>
+                            <div>The app will be added to your applications</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Share button click - opens modal with install instructions
+            shareBtn.addEventListener("click", function() {
+                populateShareSteps();
+                shareModal.classList.add("show");
+            });
+            
+            // Close modal
+            shareModalClose.addEventListener("click", function() {
+                shareModal.classList.remove("show");
+            });
+            
+            // Close on background click
+            shareModal.addEventListener("click", function(e) {
+                if (e.target === shareModal) {
+                    shareModal.classList.remove("show");
+                }
+            });
+        })();
+        
+        // =============================================================
+        // Install Prompt Banner - Works on Android AND iOS
+        // =============================================================
+        // This banner appears automatically after 3 seconds to prompt
+        // users to install the app. It shows different content based
+        // on the platform:
+        // - Android: Uses beforeinstallprompt API with "Install" button
+        // - iOS: Shows step-by-step instructions (Safari doesn't support
+        //   the install prompt API)
+        (function() {
+            let deferredPrompt = null;
+            const installBanner = document.getElementById("install-banner");
+            const installBtn = document.getElementById("install-btn");
+            const installClose = document.getElementById("install-close");
+            const iosInstructions = document.getElementById("ios-instructions");
+            
+            function isIOS() {
+                return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            }
+            
+            function isInStandaloneMode() {
+                return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+            }
+            
+            // Don't show if already installed
+            if (isInStandaloneMode()) return;
+            
+            // Check if dismissed recently (24 hours)
+            const dismissed = localStorage.getItem("installDismissed");
+            if (dismissed && Date.now() - parseInt(dismissed) < 24 * 60 * 60 * 1000) return;
+            
+            // Android - use beforeinstallprompt
+            window.addEventListener("beforeinstallprompt", function(e) {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                setTimeout(function() {
+                    installBtn.style.display = "block";
+                    installBanner.classList.add("show");
+                }, 3000);
+            });
+            
+            // iOS - show manual instructions
+            if (isIOS()) {
+                setTimeout(function() {
+                    iosInstructions.classList.add("show");
+                    installBtn.style.display = "none";
+                    installBanner.classList.add("show");
+                }, 3000);
+            }
+            
+            // Install button click (Android)
+            installBtn.addEventListener("click", async function() {
+                if (!deferredPrompt) return;
+                
+                deferredPrompt.prompt();
+                const result = await deferredPrompt.userChoice;
+                console.log("Install prompt result:", result.outcome);
+                
+                deferredPrompt = null;
+                installBanner.classList.remove("show");
+            });
+            
+            // Close button
+            installClose.addEventListener("click", function() {
+                installBanner.classList.remove("show");
+                localStorage.setItem("installDismissed", Date.now().toString());
+            });
+        })();
+        
+        // =============================================================
+        // Credits Modal
+        // =============================================================
+        // Shows attribution information for the app, including
+        // creator name, university affiliation, and thesis context.
+        (function() {
+            const creditsBtn = document.getElementById("credits-btn");
+            const creditsModal = document.getElementById("credits-modal");
+            const creditsClose = document.getElementById("credits-close");
+            
+            creditsBtn.addEventListener("click", function() {
+                creditsModal.classList.add("show");
+            });
+            
+            creditsClose.addEventListener("click", function() {
+                creditsModal.classList.remove("show");
+            });
+            
+            creditsModal.addEventListener("click", function(e) {
+                if (e.target === creditsModal) {
+                    creditsModal.classList.remove("show");
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
