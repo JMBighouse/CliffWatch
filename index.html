@@ -27,7 +27,7 @@
     <title>Cliff Watch - La Jolla Coastal Risk Monitor</title>
 
     <link rel="manifest" href="manifest.json" />
-    <link rel="apple-touch-icon" href="icon-192.png" />
+    <!--<link rel="apple-touch-icon" href="icon-192.png" />-->
     <link
       rel="stylesheet"
       href="https://js.arcgis.com/4.28/esri/themes/dark/main.css"
@@ -1240,7 +1240,7 @@
         </div>
       </div>
       <div class="header-right">
-        <button id="share-btn" aria-label="Install app">
+        <button id="share-btn" aria-label="Installation options">
           <span class="share-icon">📤</span
           ><span class="share-text">Install</span>
         </button>
@@ -1436,12 +1436,15 @@
           <strong>How to read the map</strong><br />
           • Each dot represents a monitored coastal cliff location.<br />
           • Dot color shows the current risk level (Low → Critical).<br />
-          • Tap a dot to view the probability, recent rain, waves, and earthquake activity.<br /><br />
+          • Tap a dot to view the probability, recent rain, waves, and
+          earthquake activity.<br /><br />
 
           <strong>Report button</strong><br />
-          • Use <strong>Report</strong> to share visible cliff conditions (cracks, erosion, rockfall, seepage).<br />
+          • Use <strong>Report</strong> to share visible cliff conditions
+          (cracks, erosion, rockfall, seepage).<br />
           • Reports appear on the map as <em>Unverified</em> until reviewed.<br />
-          • Reports are informational only and do not trigger emergency services.
+          • Reports are informational only and do not trigger emergency
+          services.
         </div>
 
         <button class="credits-close-btn" id="credits-close">Close</button>
@@ -1737,7 +1740,7 @@
             (attrs.report_date
               ? new Date(attrs.report_date).toLocaleDateString()
               : "Unknown date") +
-            '</div></div>'
+            "</div></div>"
           );
         }
 
@@ -1827,13 +1830,13 @@
             content: [
               {
                 type: "custom",
-                creator: createReportPopup
+                creator: createReportPopup,
               },
               {
                 type: "attachments",
-                displayType: "preview"
-              }
-            ]
+                displayType: "preview",
+              },
+            ],
           },
           outFields: ["*"],
         });
@@ -1957,7 +1960,7 @@
           query.num = 1;
           query.outFields = [
             "prec_now",
-"PRCP_1h",
+            "PRCP_1h",
             "PRCP",
             "WVHT_mean_3d",
             "WVHT_mean",
@@ -1989,10 +1992,7 @@
                 const rain = attrs.prec_now || 0,
                   rainEl = document.getElementById("current-rain");
                 rainEl.textContent =
-                  rain.toFixed(1) +
-                  "mm (" +
-                  (rain / 25.4).toFixed(2) +
-                  "in)";
+                  rain.toFixed(1) + "mm (" + (rain / 25.4).toFixed(2) + "in)";
                 rainEl.className =
                   "condition-value" +
                   (rain >= 25 ? " high" : rain >= 12.5 ? " elevated" : "");
@@ -2401,7 +2401,9 @@
               '<div class="share-modal-step"><div class="share-modal-step-num">1</div><div>Tap the <strong>menu button</strong> (⋮)</div></div><div class="share-modal-step"><div class="share-modal-step-num">2</div><div>Select <strong>"Add to Home Screen"</strong></div></div><div class="share-modal-step"><div class="share-modal-step-num">3</div><div>Tap <strong>Install</strong></div></div>';
           else
             shareModalSteps.innerHTML =
-              '<div class="share-modal-step"><div class="share-modal-step-num">1</div><div>Look for the <strong>install icon</strong> (⊕) in your browser\'s address bar</div></div><div class="share-modal-step"><div class="share-modal-step-num">2</div><div>Click <strong>"Install"</strong></div></div>';
+              '<div class="share-modal-step"><div class="share-modal-step-num">1</div><div>Click the <strong>menu button</strong> (⋮) in the top-right corner of Chrome</div></div>' +
+              '<div class="share-modal-step"><div class="share-modal-step-num">2</div><div>Select <strong>"Install Cliff Watch"</strong> if available</div></div>' +
+              '<div class="share-modal-step"><div class="share-modal-step-num">3</div><div>If Install is not shown, select <strong>"Add to Home Screen"</strong> and tap <strong>"Add"</strong></div></div>';
         }
         shareBtn.addEventListener("click", function () {
           populateShareSteps();
