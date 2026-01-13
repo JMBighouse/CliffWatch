@@ -1,6 +1,7 @@
 /**
  * Cliff Watch - Service Worker
- * Enables offline support and push notifications
+ * Enables limited offline support and push notifications
+ * Ensures all hazard and risk data are fetched live
  */
 
 const CACHE_NAME = 'cliff-watch-v1';
@@ -13,7 +14,8 @@ const CACHE_URLS = [
     'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap'
 ];
 
-// Install event - cache essential files
+// Install event - caches minimal application shell to support essential files
+// and limited offline loading without caching risk data
 self.addEventListener('install', (event) => {
     console.log('[SW] Installing...');
     event.waitUntil(
