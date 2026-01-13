@@ -3,7 +3,7 @@
  * Enables offline support and push notifications
  */
 
-const CACHE_NAME = 'cliff-watch-v1';
+const CACHE_NAME = 'cliff-watch-v2';
 const CACHE_URLS = [
     '/',
     '/index.html',
