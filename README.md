@@ -2,7 +2,7 @@
 La Jolla CA Coastal Landslide Early Warning System
 **Live App:** [cliffwatch.org](https://cliffwatch.org)
 ## ABOUT
-CliffWatch is the first operational landslide warning system to use wave-climate data as predictors. It integrates real-time oceanographic, meteorological, and seismic data within a random Forest machine learning framework to deliver risk assessments to the public.
+CliffWatch is the first operational landslide warning system to use wave-climate data as predictors. It integrates real-time oceanographic, meteorological, and seismic data within a random Forest machine learning framework to deliver risk assessments to the public. For details on the machine learning model, training data, and guidance on adapting CliffWatch for other locations, see https://github.com/JMBighouse/Thesis
 
 Developed as part of a Master's thesis at the University of Southern California, Spatial Sciences Institute.
 ## Features
@@ -14,4 +14,4 @@ Developed as part of a Master's thesis at the University of Southern California,
 - **Janna M. Bighouse**
 - MS Geographic Information Science and Technology  
   University of Southern California
-For details on the machine learning model, training data, and guidance on adapting CliffWatch for other locations, see https://github.com/JMBighouse/Thesis
+
