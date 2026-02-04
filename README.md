@@ -11,6 +11,6 @@ Developed as part of a Master's thesis at the University of Southern California,
 - Email alert subscriptions
 - Works on mobile and desktop
 - ## Author
-- **Janna Bighouse**
+- **Janna M. Bighouse**
 - MS Geographic Information Science and Technology  
   University of Southern California
