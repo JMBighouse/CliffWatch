@@ -14,3 +14,4 @@ Developed as part of a Master's thesis at the University of Southern California,
 - **Janna M. Bighouse**
 - MS Geographic Information Science and Technology  
   University of Southern California
+For details on the machine learning model, training data, and guidance on adapting CliffWatch for other locations, see https://github.com/JMBighouse/Thesis
