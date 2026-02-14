@@ -2293,7 +2293,7 @@
           );
         }
 
-        const map = new Map({ basemap: "satellite" });
+        const map = new Map({ basemap: "hybrid" });
         view = new MapView({
           container: "viewDiv",
           map: map,
@@ -2706,7 +2706,7 @@
           }
           miniMapGraphicsLayer = new GraphicsLayer();
           const miniMap = new Map({
-            basemap: "satellite",
+            basemap: "hybrid",
             layers: [miniMapGraphicsLayer],
           });
           miniMapView = new MapView({
